@@ -148,9 +148,9 @@ export default defineConfig({
 - [ ] **Step 4: Criar `.env.example`**
 
 ```
-# Produção: Postgres do Supabase (Settings > Database > Connection string > URI)
-# Projeto: iajsbmnzpjuprasssvcl
-DATABASE_URL=postgresql://postgres:SENHA@db.iajsbmnzpjuprasssvcl.supabase.co:5432/postgres
+# Produção: Supabase pelo shared pooler (IPv4). Projeto iajsbmnzpjuprasssvcl.
+# A conexão direta db.PROJETO.supabase.co só atende IPv6 e falha em rede residencial.
+DATABASE_URL=postgresql://postgres.iajsbmnzpjuprasssvcl:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
 
 # Testes que escrevem: Postgres local descartável (docker compose -f docker-compose.teste.yml up -d)
 TEST_DATABASE_URL=postgresql://postgres:teste@localhost:5433/postgres
@@ -794,11 +794,17 @@ Expected: FAIL — módulos não existem. Se vier SKIP, `TEST_DATABASE_URL` não
 // src/db/pool.ts
 import pg from "pg";
 
+/**
+ * O host do pooler é `pooler.supabase.com`, não `supabase.co` — por isso a
+ * checagem é pelo prefixo `supabase.`, que cobre os dois. Errar isso derruba
+ * a conexão com "no encryption" só em produção.
+ */
 export function criarPool(databaseUrl: string): pg.Pool {
+  const ehSupabase = databaseUrl.includes("supabase.");
   return new pg.Pool({
     connectionString: databaseUrl,
     max: 5,
-    ssl: databaseUrl.includes("supabase.co") ? { rejectUnauthorized: false } : undefined,
+    ssl: ehSupabase ? { rejectUnauthorized: false } : undefined,
   });
 }
 ```
