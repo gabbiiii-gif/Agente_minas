@@ -92,7 +92,13 @@ descrever("atendimento", () => {
 
   afterAll(async () => {
     await pool.query(`delete from agente.contatos where telefone like '${PREFIXO}%'`);
-    await gravarConfig(pool, { botAtivo: true, maxMensagensConversa: 30 });
+    // Restaura tudo, inclusive o que um teste que falhou no meio deixaria
+    // torto: config torta aqui quebra o teste seguinte, não este.
+    await gravarConfig(pool, {
+      botAtivo: true,
+      maxMensagensConversa: 30,
+      tetoContatosNovosHora: 12,
+    });
     await pool.end();
   });
 
@@ -184,6 +190,22 @@ descrever("atendimento", () => {
     expect(a.pendentes()).toBe(0);
     a.encerrar();
     await gravarConfig(pool, { maxMensagensConversa: 30 });
+  });
+
+  it("cala e entrega ao balcão quando estoura o teto de contatos novos", async () => {
+    await gravarConfig(pool, { tetoContatosNovosHora: 0 });
+    const a = novo();
+
+    await a.atender(eventoTexto(tel(9), "I-1"));
+
+    // Não manda NADA: avisar seria mandar mensagem para contato novo, que é
+    // exatamente o padrão que o WhatsApp pune.
+    expect(enviados).toHaveLength(0);
+    expect((await conversaDe(tel(9))).status).toBe("aguardando_humano");
+    expect(await contar(tel(9), "cliente")).toBe(1);
+    expect(a.pendentes()).toBe(0);
+    a.encerrar();
+    await gravarConfig(pool, { tetoContatosNovosHora: 12 });
   });
 
   it("responde o turno, grava a fala do agente e entrega pelo evolution", async () => {

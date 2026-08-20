@@ -38,6 +38,15 @@ descrever("contatos", () => {
     expect(b.id).toBe(a.id);
   });
 
+  it("diz que o contato é novo só na primeira mensagem dele", async () => {
+    await pool.query("delete from agente.contatos where telefone = '5593900000003'");
+
+    // É o que separa "cliente chegando agora" de "conversa em andamento" no
+    // teto anti-banimento, sem precisar de uma segunda consulta.
+    expect((await resolverContato(pool, "5593900000003", "Novo")).novo).toBe(true);
+    expect((await resolverContato(pool, "5593900000003", "Novo")).novo).toBe(false);
+  });
+
   it("não apaga o nome quando o pushName vem vazio", async () => {
     await resolverContato(pool, tel, "Zé");
     const c = await resolverContato(pool, tel, "");

@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { Pool } from "pg";
 import { lerEvento } from "./payload.js";
 import { criarDebounce } from "./debounce.js";
-import { resolverContato, estaSilenciado, silenciarPorHumano } from "../conversa/contatos.js";
+import { resolverContato, silenciarPorHumano } from "../conversa/contatos.js";
 import {
   conversaAtiva,
   gravarMensagem,
@@ -15,6 +15,7 @@ import { montarContexto } from "../agente/prompt.js";
 import { responder, MODELO_CONVERSA, type Fala, type Imagem } from "../agente/laco.js";
 import { executarFerramenta } from "../ferramentas/executar.js";
 import { enviar, type ConfigEvolution } from "../saida/evolution.js";
+import { avaliar } from "./guardas.js";
 
 export interface DepsAtendimento {
   pool: Pool;
@@ -150,23 +151,34 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
 
     // Daqui para baixo é só a decisão de o BOT responder ou não. A mensagem
     // já está gravada de qualquer jeito.
-    if (estaSilenciado(contato, new Date())) return;
-    if (conversa.status === "aguardando_humano") return;
+    const veredito = await avaliar(deps.pool, {
+      contato,
+      conversa,
+      cfg: await lerConfig(deps.pool),
+      mensagensNaConversa: await contarMensagens(deps.pool, conversa.id),
+      agora: new Date(),
+    });
 
-    const cfg = await lerConfig(deps.pool);
-    if (!cfg.botAtivo) return;
-
-    // Conversa que passou do teto não vai fechar sozinha.
-    if ((await contarMensagens(deps.pool, conversa.id)) > cfg.maxMensagensConversa) {
-      await marcarStatus(deps.pool, conversa.id, "aguardando_humano", {
-        desfecho: "handoff",
-        resumo: `Conversa passou de ${cfg.maxMensagensConversa} mensagens sem fechar.`,
-      });
-      await enviar(deps.pool, deps.evolution, evento.telefone, FRASE_BALCAO);
+    if (veredito.acao === "responder") {
+      debounce.registrar(conversa.id);
       return;
     }
 
-    debounce.registrar(conversa.id);
+    // O motivo vai para o log sempre: é como se descobre que o kill switch
+    // está ligado, ou que o teto encheu, sem abrir o banco.
+    console.log(`sem resposta automática na conversa ${conversa.id}: ${veredito.motivo}`);
+    if (veredito.acao === "calar") return;
+
+    await marcarStatus(deps.pool, conversa.id, "aguardando_humano", {
+      desfecho: "handoff",
+      resumo: veredito.motivo,
+    });
+
+    // `entregar_calado` não manda nada de propósito: é o teto anti-banimento,
+    // e mandar mensagem para contato novo é exatamente o risco que ele evita.
+    if (veredito.acao === "entregar_avisando") {
+      await enviar(deps.pool, deps.evolution, evento.telefone, FRASE_BALCAO);
+    }
   }
 
   async function responderTurno(conversaId: string): Promise<void> {

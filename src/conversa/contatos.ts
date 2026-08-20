@@ -6,6 +6,8 @@ export interface Contato {
   nome: string | null;
   motoId: string | null;
   silenciadoAte: Date | null;
+  /** true quando esta mensagem criou o contato — alimenta o teto anti-banimento. */
+  novo: boolean;
 }
 
 /**
@@ -35,7 +37,7 @@ export async function resolverContato(
      values ($1, nullif($2, ''))
      on conflict (telefone) do update
        set nome = coalesce(nullif($2, ''), agente.contatos.nome)
-     returning id, telefone, nome, moto_id, silenciado_ate`,
+     returning id, telefone, nome, moto_id, silenciado_ate, (xmax = 0) as inserido`,
     [telefone, nome],
   );
 
@@ -46,6 +48,10 @@ export async function resolverContato(
     nome: r.nome,
     motoId: r.moto_id,
     silenciadoAte: r.silenciado_ate,
+    // `xmax = 0` distingue linha inserida de linha atualizada no mesmo
+    // upsert. Sem isso não dá para saber que este é o primeiro contato da
+    // pessoa sem uma segunda consulta.
+    novo: r.inserido === true,
   };
 }
 
