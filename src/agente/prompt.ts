@@ -1,33 +1,39 @@
-export interface ContextoPrompt {
-  agora: Date;
+export interface DadosLoja {
   horario: string;
   endereco: string;
+}
+
+export interface ContextoTurno {
+  agora: Date;
   nome: string | null;
   moto: string | null;
 }
 
 /**
- * Monta o system prompt do atendimento.
+ * A parte FIXA do system prompt: identidade, regras e dados da loja.
+ *
+ * Está separada do que muda a cada mensagem por causa do cache da API, que
+ * casa por PREFIXO: basta um byte diferente no começo para todo o resto ser
+ * cobrado de novo. Enquanto o dono não editar horário, endereço ou as
+ * instruções, este texto é idêntico em toda requisição e a entrada sai por
+ * cerca de 10% do preço. O que varia de um turno para o outro (relógio, nome
+ * do cliente, moto) mora em `montarContexto` e entra depois do breakpoint —
+ * ver como o `system` é montado em `laco.ts`.
  *
  * É aqui que moram as regras que o negócio não pode perder: nada de preço,
  * nada de quantidade, e compatibilidade só quando o balcão já confirmou. As
- * três estão cobertas por teste porque prompt é fácil de editar sem perceber
- * o que se quebrou.
+ * três estão cobertas por `tests/unit/prompt.test.ts` porque prompt é fácil
+ * de editar sem perceber o que se quebrou.
  */
-export function montarPrompt(ctx: ContextoPrompt): string {
-  const dataHora = ctx.agora.toLocaleString("pt-BR", { timeZone: "America/Belem" });
-
+export function montarPrompt(loja: DadosLoja): string {
   return `# IDENTIDADE
 Você é o atendente virtual da MINAS AUTO PEÇAS — peças de moto e oficina, em Altamira/PA.
 Sua função é o primeiro atendimento no WhatsApp: descobrir a moto, descobrir a peça,
 consultar o sistema e dizer se a loja tem.
 
-# CONTEXTO
-Data/hora: ${dataHora}
-Horário de funcionamento: ${ctx.horario}
-Endereço: ${ctx.endereco}
-Cliente: ${ctx.nome ?? "não identificado"}
-Moto cadastrada: ${ctx.moto ?? "nenhuma"}
+# A LOJA
+Horário de funcionamento: ${loja.horario}
+Endereço: ${loja.endereco}
 
 # REGRA NÚMERO 1 — PREÇO
 Você NÃO tem acesso a preço. Nunca informe, estime, sugira faixa ou compare valores.
@@ -57,6 +63,9 @@ NUNCA deduza compatibilidade por semelhança de nome ou de cilindrada.
 Se \`ambiguo\` vier true, elas são parecidas demais para você escolher sozinho:
 mostre no máximo duas e pergunte qual é, de um jeito curto.
 Se vier uma opção só e clara, confirme direto.
+Se \`achados\` vier vazio e \`existe_sem_estoque\` vier true, a loja trabalha com a peça
+mas ela está zerada — ofereça encomenda. Se os dois vierem vazio/false, a loja não
+tem essa peça cadastrada.
 
 # FLUXO
 1) Descubra a MOTO antes de qualquer busca: marca, modelo e ano ou cilindrada.
@@ -114,4 +123,20 @@ Ao transferir: "Vou chamar o pessoal do balcão aqui pra te atender. Um minuto."
 # FORA DO HORÁRIO
 Atenda normalmente e diga se tem a peça. Só não prometa separação nem entrega:
 "Deixei anotado. Amanhã cedo o balcão te confirma."`;
+}
+
+/**
+ * A parte VOLÁTIL do system prompt: o que muda a cada mensagem.
+ *
+ * Vai num segundo bloco, depois do breakpoint de cache. Se este texto voltasse
+ * para dentro de `montarPrompt`, o relógio mudaria o prefixo a cada requisição
+ * e o cache nunca acertaria — foi exatamente o que acontecia até aqui.
+ */
+export function montarContexto(ctx: ContextoTurno): string {
+  const dataHora = ctx.agora.toLocaleString("pt-BR", { timeZone: "America/Belem" });
+
+  return `# ESTA CONVERSA
+Data/hora: ${dataHora}
+Cliente: ${ctx.nome ?? "não identificado"}
+Moto cadastrada: ${ctx.moto ?? "nenhuma"}`;
 }

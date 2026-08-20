@@ -88,32 +88,24 @@ export async function gravarConfig(
 }
 
 /**
- * O prompt que vai para o modelo.
+ * A parte fixa do prompt que vai para o modelo.
  *
  * Se o dono editou no painel, usa o texto dele como está — inclusive os erros,
  * porque é ele quem manda no atendimento. Senão monta o padrão do código com
  * horário e endereço atuais.
+ *
+ * Não recebe data nem dados do cliente de propósito: essa parte é
+ * `montarContexto`, que entra num segundo bloco do system justamente para não
+ * invalidar o cache a cada mensagem — ver `laco.ts`.
  */
-export function promptEfetivo(cfg: ConfigLoja, agora = new Date()): string {
+export function promptEfetivo(cfg: ConfigLoja): string {
   if (cfg.promptCustomizado !== null && cfg.promptCustomizado.trim() !== "") {
     return cfg.promptCustomizado;
   }
-  return montarPrompt({
-    agora,
-    horario: cfg.horario,
-    endereco: cfg.endereco,
-    nome: null,
-    moto: null,
-  });
+  return montarPrompt({ horario: cfg.horario, endereco: cfg.endereco });
 }
 
 /** O padrão do código, para o painel oferecer "restaurar". */
-export function promptPadrao(cfg: ConfigLoja, agora = new Date()): string {
-  return montarPrompt({
-    agora,
-    horario: cfg.horario,
-    endereco: cfg.endereco,
-    nome: null,
-    moto: null,
-  });
+export function promptPadrao(cfg: ConfigLoja): string {
+  return montarPrompt({ horario: cfg.horario, endereco: cfg.endereco });
 }

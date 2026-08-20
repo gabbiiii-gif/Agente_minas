@@ -8,7 +8,7 @@ import { createInterface } from "node:readline/promises";
 import Anthropic from "@anthropic-ai/sdk";
 import { criarPool } from "../db/pool.js";
 import { lerEnv } from "../config/env.js";
-import { montarPrompt } from "./prompt.js";
+import { montarPrompt, montarContexto } from "./prompt.js";
 import { responder, type Fala } from "./laco.js";
 import { executarFerramenta } from "../ferramentas/executar.js";
 
@@ -16,12 +16,11 @@ const env = lerEnv();
 const pool = criarPool(env.databaseUrl);
 const anthropic = new Anthropic({ apiKey: env.anthropicApiKey, maxRetries: 2 });
 
+// Montado uma vez só: é este texto que a API guarda em cache entre as
+// mensagens. O que muda a cada turno (o relógio) vai em `montarContexto`.
 const prompt = montarPrompt({
-  agora: new Date(),
   horario: "Seg a Sex 8h-18h · Sáb 8h-12h",
   endereco: "Av. Tancredo Neves, 1200 — Altamira/PA",
-  nome: null,
-  moto: null,
 });
 
 // Conversa de teste não grava em `conversas`: sem id, as ferramentas que
@@ -36,6 +35,8 @@ console.log("Escreva como um cliente escreveria. Ctrl+C para sair.\n");
 
 let totalIn = 0;
 let totalOut = 0;
+let totalCacheLidos = 0;
+let totalCacheGravados = 0;
 
 try {
   for (;;) {
@@ -49,6 +50,8 @@ try {
       {
         anthropic,
         prompt,
+        // Refeito a cada turno: o relógio anda enquanto a conversa corre.
+        contexto: montarContexto({ agora: new Date(), nome: null, moto: null }),
         executar: (nome, entrada) => executarFerramenta(pool, ctx, nome, entrada),
         aoUsarFerramenta: (nome, entrada, resultado) => {
           console.log(`  · ${nome}(${JSON.stringify(entrada)})`);
@@ -60,6 +63,8 @@ try {
 
     totalIn += turno.tokensIn;
     totalOut += turno.tokensOut;
+    totalCacheLidos += turno.tokensCacheLidos;
+    totalCacheGravados += turno.tokensCacheGravados;
 
     console.log(`\nagente> ${turno.texto}\n`);
     historico.push({ papel: "agente", conteudo: turno.texto });
@@ -73,5 +78,10 @@ try {
 } finally {
   io.close();
   await pool.end();
-  console.log(`\ntokens — entrada ${totalIn} · saída ${totalOut}`);
+  // "cache lido" zerado depois da segunda mensagem quer dizer que alguma
+  // coisa volátil entrou no prompt fixo e o cache parou de pegar.
+  console.log(
+    `\ntokens — entrada nova ${totalIn} · saída ${totalOut}` +
+      ` · cache lido ${totalCacheLidos} · cache gravado ${totalCacheGravados}`,
+  );
 }

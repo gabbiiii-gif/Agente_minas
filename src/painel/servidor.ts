@@ -15,7 +15,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Pool } from "pg";
 import { criarPool } from "../db/pool.js";
 import { lerEnv } from "../config/env.js";
-import { lerConfig, gravarConfig, promptPadrao, type ConfigLoja } from "../config/loja.js";
+import {
+  lerConfig,
+  gravarConfig,
+  promptPadrao,
+  promptEfetivo,
+  type ConfigLoja,
+} from "../config/loja.js";
+import { montarContexto } from "../agente/prompt.js";
 import { responder, type Fala } from "../agente/laco.js";
 import { executarFerramenta } from "../ferramentas/executar.js";
 
@@ -79,8 +86,10 @@ export async function criarPainel(pool: Pool, anthropic: Anthropic) {
     if (mensagem === "") return resp.code(400).send({ erro: "mensagem vazia" });
 
     const cfg = await lerConfig(pool, false);
+    // Sem texto na tela, testa o que está valendo de verdade para o cliente
+    // (o customizado, se o dono salvou um) — não o padrão do código.
     const prompt =
-      corpo.prompt && corpo.prompt.trim() !== "" ? corpo.prompt : promptPadrao(cfg);
+      corpo.prompt && corpo.prompt.trim() !== "" ? corpo.prompt : promptEfetivo(cfg);
 
     const historico: Fala[] = Array.isArray(corpo.historico) ? corpo.historico : [];
     if (historico.at(-1)?.conteudo !== mensagem) {
@@ -93,6 +102,9 @@ export async function criarPainel(pool: Pool, anthropic: Anthropic) {
         {
           anthropic,
           prompt,
+          // O mesmo contexto que a produção manda, para o teste não responder
+          // com uma data diferente da que o cliente veria.
+          contexto: montarContexto({ agora: new Date(), nome: null, moto: null }),
           // conversaId null: teste do painel não entra no funil de métricas.
           executar: (nome, entrada) =>
             executarFerramenta(pool, { conversaId: null, contatoId: null }, nome, entrada),
