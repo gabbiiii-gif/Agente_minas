@@ -33,10 +33,13 @@ descrever("schema agente", () => {
   });
 
   it("não tem nenhuma coluna de preço em lugar nenhum", async () => {
+    // agente.config é um par chave/valor de configuração — o "valor" ali é o
+    // conteúdo jsonb da chave, não dinheiro. É a única exceção permitida.
     const { rows } = await pool.query<{ n: string }>(
       `select count(*)::text as n from information_schema.columns
        where table_schema = 'agente'
-         and (column_name ilike '%preco%' or column_name ilike '%valor%')`,
+         and (column_name ilike '%preco%' or column_name ilike '%valor%')
+         and not (table_name = 'config' and column_name = 'valor')`,
     );
     expect(rows[0]!.n).toBe("0");
   });
