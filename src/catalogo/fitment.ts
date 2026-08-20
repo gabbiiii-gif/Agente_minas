@@ -70,6 +70,12 @@ Regras:
 export async function extrairModelos(
   descricoes: string[],
   apiKey: string,
+  /**
+   * Com `true`, relança o erro do lote em vez de seguir sem ele. O import em
+   * lote quer tolerância (perder 40 peças não justifica abortar 5.232); o
+   * teste quer saber exatamente por que falhou.
+   */
+  estrito = false,
 ): Promise<Map<string, ModeloExtraido[]>> {
   const cliente = new Anthropic({ apiKey });
   const saida = new Map<string, ModeloExtraido[]>();
@@ -96,6 +102,7 @@ export async function extrairModelos(
           });
           return { lote, itens: resposta.parsed_output?.itens ?? [] };
         } catch (erro) {
+          if (estrito) throw erro;
           console.warn(
             `Lote ${i + n} falhou (${(erro as Error).message}); as peças dele ficam sem fitment.`,
           );
@@ -150,13 +157,24 @@ export function casarComFrota(
 export async function popularFitment(
   pool: Pool,
   apiKey: string,
+  /**
+   * Por padrão processa só quem ainda não passou pela extração. Passe `false`
+   * para reprocessar o catálogo inteiro — necessário depois de mexer no seed
+   * de motos, que muda o resultado do casamento.
+   */
+  apenasPendentes = true,
 ): Promise<{ produtos: number; vinculos: number; semCasar: number }> {
   const { rows: frota } = await pool.query<LinhaMoto>(
     "select id, marca, modelo, cilindrada from agente.motos",
   );
   const { rows: produtos } = await pool.query<{ id: string; descricao: string }>(
-    "select id, descricao from agente.produtos where ativo",
+    `select id, descricao from agente.produtos
+      where ativo ${apenasPendentes ? "and fitment_em is null" : ""}`,
   );
+
+  if (produtos.length === 0) {
+    return { produtos: 0, vinculos: 0, semCasar: 0 };
+  }
 
   const extraidos = await extrairModelos(
     produtos.map((p) => p.descricao),
@@ -167,10 +185,17 @@ export async function popularFitment(
   // seriam ~9.000 idas ao banco.
   const paresProduto: string[] = [];
   const paresMoto: string[] = [];
+  // Só marca como processado quem o modelo realmente respondeu. Produto de
+  // lote que falhou fica sem marca e entra na próxima execução.
+  const processados: string[] = [];
   let semCasar = 0;
 
   for (const produto of produtos) {
-    const motoIds = casarComFrota(extraidos.get(produto.descricao) ?? [], frota);
+    const modelos = extraidos.get(produto.descricao);
+    if (modelos === undefined) continue;
+    processados.push(produto.id);
+
+    const motoIds = casarComFrota(modelos, frota);
     if (motoIds.length === 0) {
       semCasar += 1;
       continue;
@@ -194,5 +219,13 @@ export async function popularFitment(
     );
   }
 
-  return { produtos: produtos.length, vinculos: paresProduto.length, semCasar };
+  for (let i = 0; i < processados.length; i += LOTE_INSERT) {
+    await pool.query(
+      `update agente.produtos set fitment_em = now()
+        where id = any($1::uuid[])`,
+      [processados.slice(i, i + LOTE_INSERT)],
+    );
+  }
+
+  return { produtos: processados.length, vinculos: paresProduto.length, semCasar };
 }
