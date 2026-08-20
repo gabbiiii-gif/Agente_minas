@@ -3,13 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "db:migrar": "tsx src/db/migrar.ts",
-    "catalogo:importar": "tsx src/catalogo/cli.ts"
+    "db:migrar": "tsx --env-file-if-exists=.env src/db/migrar.ts",
+    "catalogo:importar": "tsx --env-file-if-exists=.env src/catalogo/cli.ts",
+    "db:seed": "tsx --env-file-if-exists=.env src/db/semear.ts",
+    "catalogo:fitment": "tsx --env-file-if-exists=.env src/catalogo/rodar-fitment.ts",
+    "test:busca": "vitest run tests/busca/recall.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
