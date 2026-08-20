@@ -32,4 +32,19 @@ describe("normalizar", () => {
   it("devolve string vazia para entrada vazia", () => {
     expect(normalizar("   ")).toBe("");
   });
+
+  it("separa modelo de cilindrada para casar com o jeito do cliente", () => {
+    // o ERP escreve grudado, o cliente escreve separado: os dois têm que
+    // chegar na mesma forma, senão "fan 150" não acha "FAN150".
+    expect(normalizar("CABO ACELERADOR FAN150 09/13 ESI")).toBe(
+      "CABO ACELERADOR FAN 150 09 13 ESI",
+    );
+    expect(normalizar("cabo de acelerador fan 150")).toBe(
+      "CABO DE ACELERADOR FAN 150",
+    );
+  });
+
+  it("preserva medida de pneu, que é dígito com dígito", () => {
+    expect(normalizar("PNEU 90/90-19 BORRACHUDO")).toBe("PNEU 90 90-19 BORRACHUDO");
+  });
 });

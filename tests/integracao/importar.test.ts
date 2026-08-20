@@ -66,7 +66,9 @@ descrever("importarCatalogo", () => {
     const { rows } = await pool.query<{ descricao_norm: string; estoque: number }>(
       "select descricao_norm, estoque from agente.produtos where codigo = '9990001'",
     );
-    expect(rows[0]!.descricao_norm).toBe("RETENTOR DIANTEIRO TITAN160 VEDAMOTORS");
+    // "TITAN160" vira "TITAN 160": é assim que o cliente escreve, e é o que
+    // faz a busca casar os dois vocabulários (ver normalizar.ts).
+    expect(rows[0]!.descricao_norm).toBe("RETENTOR DIANTEIRO TITAN 160 VEDAMOTORS");
     expect(rows[0]!.estoque).toBe(3);
   });
 
