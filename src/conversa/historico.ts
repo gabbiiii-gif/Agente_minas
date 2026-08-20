@@ -123,6 +123,21 @@ export async function ultimasMensagens(
 }
 
 /**
+ * Quantas mensagens a conversa já tem, dos dois lados.
+ *
+ * Alimenta o teto de mensagens por conversa: cliente que passa de 30 trocas
+ * sem fechar não vai fechar sozinho — está enrolado, e o balcão resolve em
+ * uma frase o que o agente não resolveu em trinta.
+ */
+export async function contarMensagens(pool: Pool, conversaId: string): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
+    "select count(*)::text as n from agente.mensagens where conversa_id = $1",
+    [conversaId],
+  );
+  return Number(rows[0]!.n);
+}
+
+/**
  * Muda o status da conversa e, opcionalmente, os campos de fechamento.
  *
  * `coalesce` em cada campo para que passar só `desfecho` não apague o resumo

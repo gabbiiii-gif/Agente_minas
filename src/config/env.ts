@@ -31,3 +31,40 @@ export function lerEnv(fonte: Fonte = process.env): Env {
     anthropicApiKey: obrigatoria(fonte, "ANTHROPIC_API_KEY"),
   };
 }
+
+/** O que o gateway do WhatsApp precisa, além do básico. */
+export interface EnvGateway extends Env {
+  evolutionUrl: string;
+  evolutionApiKey: string;
+  evolutionInstancia: string;
+  webhookSegredo: string;
+  porta: number;
+  /** null quando não configurado: o gateway sobe, só não alerta ninguém. */
+  telefoneDono: string | null;
+}
+
+/**
+ * Lê a configuração do gateway.
+ *
+ * Separado de `lerEnv` de propósito: os CLIs de catálogo e de conversa rodam
+ * na máquina do desenvolvedor e não têm Evolution nenhum. Exigir essas
+ * variáveis lá quebraria o import de produtos por nada.
+ */
+export function lerEnvGateway(fonte: Fonte = process.env): EnvGateway {
+  const porta = Number(fonte.PORTA ?? 3000);
+  if (!Number.isInteger(porta) || porta <= 0) {
+    throw new Error(`PORTA inválida: ${fonte.PORTA}`);
+  }
+
+  return {
+    ...lerEnv(fonte),
+    evolutionUrl: obrigatoria(fonte, "EVOLUTION_URL"),
+    evolutionApiKey: obrigatoria(fonte, "EVOLUTION_API_KEY"),
+    // A instância tem padrão porque é a mesma desde o pareamento; as outras
+    // não podem ter, porque errar em silêncio significa webhook aberto.
+    evolutionInstancia: fonte.EVOLUTION_INSTANCIA?.trim() || "minas",
+    webhookSegredo: obrigatoria(fonte, "WEBHOOK_SEGREDO"),
+    porta,
+    telefoneDono: fonte.TELEFONE_DONO?.trim() || null,
+  };
+}

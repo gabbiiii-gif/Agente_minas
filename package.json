@@ -15,6 +15,8 @@
     "db:seed": "tsx --env-file-if-exists=.env src/db/semear.ts",
     "catalogo:fitment": "tsx --env-file-if-exists=.env src/catalogo/rodar-fitment.ts",
     "test:busca": "vitest run tests/busca/recall.test.ts",
+    "start": "tsx --env-file-if-exists=.env src/gateway/servidor.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/gateway/servidor.ts",
     "agente:conversar": "tsx --env-file-if-exists=.env src/agente/cli.ts",
     "painel": "tsx --env-file-if-exists=.env src/painel/servidor.ts",
     "whatsapp:parear": "tsx --env-file-if-exists=.env src/whatsapp/parear.ts",
