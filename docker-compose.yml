@@ -1,0 +1,61 @@
+# Evolution API — a ponte com o WhatsApp.
+#
+# Roda igual na máquina do desenvolvedor e na VPS. O que muda é só a URL que
+# o webhook aponta. O postgres e o redis daqui são de uso interno do Evolution
+# (sessão, mensagens, cache) e não têm relação com o Supabase do agente.
+services:
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.0
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_SENHA}@evolution-db:5432/evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_LOCAL_ENABLED: "false"
+      # O agente responde por conta própria; qualquer integração automática do
+      # Evolution (typebot, chatwoot, openai) atrapalharia.
+      TYPEBOT_ENABLED: "false"
+      CHATWOOT_ENABLED: "false"
+      OPENAI_ENABLED: "false"
+      LOG_LEVEL: ERROR,WARN,INFO
+    depends_on:
+      evolution-db:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_started
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  evolution-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_SENHA}
+      POSTGRES_DB: evolution
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - evolution_db:/var/lib/postgresql/data
+
+  evolution-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - evolution_redis:/data
+
+volumes:
+  evolution_instances:
+  evolution_db:
+  evolution_redis:

@@ -15,10 +15,12 @@
     "db:seed": "tsx --env-file-if-exists=.env src/db/semear.ts",
     "catalogo:fitment": "tsx --env-file-if-exists=.env src/catalogo/rodar-fitment.ts",
     "test:busca": "vitest run tests/busca/recall.test.ts",
-    "agente:conversar": "tsx --env-file-if-exists=.env src/agente/cli.ts"
+    "agente:conversar": "tsx --env-file-if-exists=.env src/agente/cli.ts",
+    "painel": "tsx --env-file-if-exists=.env src/painel/servidor.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
+    "fastify": "^5.12.1",
     "fflate": "^0.8.2",
     "pg": "^8.13.1",
     "zod": "^4.4.3"

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel · Minas Auto Peças</title>
+<style>
+  :root {
+    --fundo: #f6f7f9;
+    --papel: #ffffff;
+    --borda: #dfe3e8;
+    --texto: #1a1d21;
+    --suave: #656d76;
+    --acento: #1f6feb;
+    --ok: #1a7f37;
+    --alerta: #9a6700;
+    --perigo: #cf222e;
+    --raio: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fundo: #0d1117; --papel: #161b22; --borda: #30363d;
+      --texto: #e6edf3; --suave: #8d96a0; --acento: #4493f8;
+      --ok: #3fb950; --alerta: #d29922; --perigo: #f85149;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 64px;
+    background: var(--fundo); color: var(--texto);
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .env { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--suave); font-size: 14px; }
+  .cartao {
+    background: var(--papel); border: 1px solid var(--borda);
+    border-radius: var(--raio); padding: 20px; margin-bottom: 16px;
+  }
+  .cartao h2 { font-size: 15px; margin: 0 0 4px; }
+  .cartao .dica { color: var(--suave); font-size: 13px; margin: 0 0 16px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 5px; }
+  input[type=text], input[type=number], textarea {
+    width: 100%; padding: 9px 11px; font: inherit; color: var(--texto);
+    background: var(--fundo); border: 1px solid var(--borda);
+    border-radius: 7px;
+  }
+  textarea { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px; line-height: 1.5; resize: vertical; }
+  input:focus, textarea:focus { outline: 2px solid var(--acento); outline-offset: -1px; }
+  .linha { display: flex; gap: 14px; flex-wrap: wrap; }
+  .linha > div { flex: 1 1 200px; }
+  button {
+    font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 7px;
+    border: 1px solid var(--borda); background: var(--papel); color: var(--texto);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--acento); }
+  button.primario { background: var(--acento); border-color: var(--acento); color: #fff; }
+  button:disabled { opacity: .55; cursor: default; }
+  .acoes { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+  .chave { display: flex; align-items: center; gap: 12px; }
+  .interruptor { position: relative; width: 46px; height: 26px; flex: none; }
+  .interruptor input { opacity: 0; width: 0; height: 0; }
+  .trilho {
+    position: absolute; inset: 0; background: var(--borda);
+    border-radius: 26px; transition: background .15s; cursor: pointer;
+  }
+  .trilho::before {
+    content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: transform .15s;
+  }
+  input:checked + .trilho { background: var(--ok); }
+  input:checked + .trilho::before { transform: translateX(20px); }
+  .estado { font-weight: 600; }
+  .estado.ligado { color: var(--ok); }
+  .estado.desligado { color: var(--perigo); }
+  .aviso {
+    border-left: 3px solid var(--alerta); background: color-mix(in srgb, var(--alerta) 8%, transparent);
+    padding: 10px 14px; border-radius: 0 7px 7px 0; font-size: 13px; margin-top: 14px;
+  }
+  .recado { font-size: 13px; color: var(--suave); }
+  .recado.ok { color: var(--ok); }
+  .recado.erro { color: var(--perigo); }
+  .metricas { display: flex; gap: 22px; flex-wrap: wrap; }
+  .metrica .n { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+  .metrica .r { font-size: 12px; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+  .conversa {
+    background: var(--fundo); border: 1px solid var(--borda); border-radius: 7px;
+    padding: 14px; margin-top: 14px; max-height: 380px; overflow-y: auto;
+  }
+  .balao { margin-bottom: 10px; }
+  .balao .quem { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); }
+  .balao.cliente .quem { color: var(--acento); }
+  .balao.agente .quem { color: var(--ok); }
+  .balao .txt { white-space: pre-wrap; }
+  .tool {
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+    color: var(--suave); border-left: 2px solid var(--borda);
+    padding-left: 10px; margin: 6px 0; overflow-x: auto;
+  }
+  .vazio { color: var(--suave); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="env">
+
+  <header>
+    <h1>Minas Auto Peças — painel do agente</h1>
+    <div class="sub">Ajuste o atendimento sem mexer em código. O que você salva aqui vale em até um minuto.</div>
+  </header>
+
+  <div class="cartao">
+    <h2>Atendimento automático</h2>
+    <p class="dica">Desligar faz o agente parar de responder na hora. As mensagens continuam chegando e ficam para o balcão.</p>
+    <div class="chave">
+      <label class="interruptor" style="margin:0">
+        <input type="checkbox" id="botAtivo">
+        <span class="trilho"></span>
+      </label>
+      <span class="estado" id="estadoBot">carregando…</span>
+    </div>
+  </div>
+
+  <div class="cartao">
+    <h2>Dados da loja</h2>
+    <p class="dica">Entram no prompt: é o que o agente responde quando perguntam horário ou endereço.</p>
+    <label for="horario">Horário de funcionamento</label>
+    <input type="text" id="horario">
+    <label for="endereco">Endereço</label>
+    <input type="text" id="endereco">
+    <div class="linha">
+      <div>
+        <label for="teto">Contatos novos por hora</label>
+        <input type="number" id="teto" min="1" max="200">
+      </div>
+      <div>
+        <label for="maxMsg">Mensagens antes de chamar humano</label>
+        <input type="number" id="maxMsg" min="5" max="200">
+      </div>
+    </div>
+    <div class="aviso">
+      O teto por hora existe contra banimento: número não oficial que fala com muita gente nova de uma vez é padrão que o WhatsApp pune.
+    </div>
+  </div>
+
+  <div class="cartao">
+    <h2>Instruções do agente</h2>
+    <p class="dica">O texto que manda no comportamento. Editar aqui substitui o padrão do sistema — inclusive as regras de proteção, então leia antes de apagar.</p>
+    <textarea id="prompt" rows="22" spellcheck="false"></textarea>
+    <div class="acoes">
+      <button id="restaurar">Restaurar padrão</button>
+      <span class="recado" id="recadoPrompt"></span>
+    </div>
+    <div class="aviso">
+      Três regras não deveriam sair daqui: nunca falar preço, nunca dizer quantidade,
+      e só afirmar compatibilidade quando vier <code>fitment: humano</code>.
+      Preço e quantidade também estão travados fora do prompt — a ferramenta de busca
+      não entrega esses dados ao modelo, então nem editando o texto ele consegue dizer.
+    </div>
+  </div>
+
+  <div class="cartao">
+    <h2>Testar antes de salvar</h2>
+    <p class="dica">Escreva como um cliente escreveria. Roda contra o catálogo real, usando o texto que está aí em cima.</p>
+    <label for="teste">Mensagem do cliente</label>
+    <input type="text" id="teste" placeholder="tem pastilha de freio da biz 125?">
+    <div class="acoes">
+      <button class="primario" id="enviarTeste">Enviar</button>
+      <button id="limparTeste">Limpar conversa</button>
+      <span class="recado" id="recadoTeste"></span>
+    </div>
+    <div class="conversa" id="conversa"><span class="vazio">Nenhuma mensagem ainda.</span></div>
+  </div>
+
+  <div class="cartao">
+    <h2>Catálogo</h2>
+    <div class="metricas" id="metricas"><span class="vazio">carregando…</span></div>
+  </div>
+
+  <div class="acoes">
+    <button class="primario" id="salvar">Salvar tudo</button>
+    <span class="recado" id="recadoSalvar"></span>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let padraoDoSistema = "";
+let historico = [];
+
+function recado(el, texto, tipo = "") {
+  el.textContent = texto;
+  el.className = "recado " + tipo;
+  if (texto) setTimeout(() => { if (el.textContent === texto) el.textContent = ""; }, 4000);
+}
+
+function pintarEstadoBot() {
+  const ligado = $("botAtivo").checked;
+  $("estadoBot").textContent = ligado ? "Respondendo" : "Desligado — só o balcão atende";
+  $("estadoBot").className = "estado " + (ligado ? "ligado" : "desligado");
+}
+
+async function carregar() {
+  const r = await fetch("/api/config");
+  const c = await r.json();
+  $("botAtivo").checked = c.botAtivo;
+  $("horario").value = c.horario;
+  $("endereco").value = c.endereco;
+  $("teto").value = c.tetoContatosNovosHora;
+  $("maxMsg").value = c.maxMensagensConversa;
+  padraoDoSistema = c.promptPadrao;
+  $("prompt").value = c.promptCustomizado ?? c.promptPadrao;
+  pintarEstadoBot();
+
+  const m = await (await fetch("/api/metricas")).json();
+  $("metricas").innerHTML = [
+    ["produtos", m.produtos], ["com compatibilidade", m.comFitment],
+    ["motos", m.motos], ["demandas 30d", m.demandas],
+  ].map(([r, n]) => `<div class="metrica"><div class="n">${n}</div><div class="r">${r}</div></div>`).join("");
+}
+
+async function salvar() {
+  $("salvar").disabled = true;
+  try {
+    const corpo = {
+      botAtivo: $("botAtivo").checked,
+      horario: $("horario").value,
+      endereco: $("endereco").value,
+      tetoContatosNovosHora: Number($("teto").value),
+      maxMensagensConversa: Number($("maxMsg").value),
+      // Igual ao padrão significa "não customizei": grava null para o texto
+      // continuar acompanhando as melhorias do sistema.
+      promptCustomizado: $("prompt").value.trim() === padraoDoSistema.trim() ? null : $("prompt").value,
+    };
+    const r = await fetch("/api/config", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    recado($("recadoSalvar"), "Salvo. Vale em até um minuto.", "ok");
+  } catch (e) {
+    recado($("recadoSalvar"), "Não salvou: " + e.message, "erro");
+  } finally {
+    $("salvar").disabled = false;
+  }
+}
+
+function desenharConversa() {
+  const el = $("conversa");
+  if (historico.length === 0) {
+    el.innerHTML = '<span class="vazio">Nenhuma mensagem ainda.</span>';
+    return;
+  }
+  el.innerHTML = historico.map((h) => {
+    if (h.tipo === "tool") return `<div class="tool">· ${h.texto}</div>`;
+    return `<div class="balao ${h.tipo}"><div class="quem">${h.tipo}</div><div class="txt">${
+      h.texto.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))
+    }</div></div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function testar() {
+  const msg = $("teste").value.trim();
+  if (msg === "") return;
+  $("enviarTeste").disabled = true;
+  historico.push({ tipo: "cliente", texto: msg });
+  desenharConversa();
+  $("teste").value = "";
+
+  try {
+    const r = await fetch("/api/testar", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mensagem: msg,
+        prompt: $("prompt").value,
+        historico: historico.filter((h) => h.tipo !== "tool").map((h) => ({ papel: h.tipo, conteudo: h.texto })),
+      }),
+    });
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.erro ?? "falhou");
+    for (const f of t.ferramentas ?? []) historico.push({ tipo: "tool", texto: f });
+    historico.push({ tipo: "agente", texto: t.texto });
+    if (t.handoff) historico.push({ tipo: "tool", texto: `HANDOFF (${t.handoff.motivo}): ${t.handoff.resumo}` });
+    desenharConversa();
+    recado($("recadoTeste"), `${t.tokensIn} tokens de entrada · ${t.tokensOut} de saída`);
+  } catch (e) {
+    recado($("recadoTeste"), "Falhou: " + e.message, "erro");
+  } finally {
+    $("enviarTeste").disabled = false;
+  }
+}
+
+$("botAtivo").addEventListener("change", pintarEstadoBot);
+$("salvar").addEventListener("click", salvar);
+$("enviarTeste").addEventListener("click", testar);
+$("teste").addEventListener("keydown", (e) => { if (e.key === "Enter") testar(); });
+$("limparTeste").addEventListener("click", () => { historico = []; desenharConversa(); });
+$("restaurar").addEventListener("click", () => {
+  $("prompt").value = padraoDoSistema;
+  recado($("recadoPrompt"), "Texto padrão recarregado — salve para valer.", "ok");
+});
+
+carregar();
+</script>
+</body>
+</html>
