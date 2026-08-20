@@ -5,6 +5,11 @@ import { normalizar } from "./normalizar.js";
 import { expandir } from "./expandir.js";
 import { carregarSinonimos } from "../db/semear.js";
 
+/**
+ * O que o import fez, para o CLI imprimir e o operador conferir.
+ * "zerados" é o número que merece atenção: são produtos que sumiram do
+ * relatório e tiveram o estoque zerado.
+ */
 export interface ResultadoImport {
   lidos: number;
   inseridos: number;
@@ -12,8 +17,20 @@ export interface ResultadoImport {
   zerados: number;
 }
 
+// 500 linhas por INSERT: o catálogo inteiro numa query só estouraria o teto
+// de parâmetros do Postgres, e uma linha por vez levaria minutos.
 const LOTE = 500;
 
+/**
+ * Lê o relatório do ERP e sincroniza o catálogo.
+ *
+ * Roda tudo numa transação só: ou o catálogo inteiro entra, ou nada muda.
+ * Import pela metade deixaria o agente afirmando estoque errado.
+ *
+ * Regra de ausência: código que estava no banco e não veio no arquivo tem o
+ * estoque zerado, mas continua ativo — sumir do relatório significa "sem
+ * estoque", não "produto morto".
+ */
 export async function importarCatalogo(
   pool: Pool,
   caminho: string,

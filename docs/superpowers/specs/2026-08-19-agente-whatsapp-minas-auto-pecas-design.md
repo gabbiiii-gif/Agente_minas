@@ -16,7 +16,7 @@ O agente resolve a parte mecânica dessa conversa: identifica a moto, identifica
 
 Cinco restrições foram levantadas antes do desenho e definem tudo que vem depois.
 
-**O ERP não exporta preço.** O relatório de estoque disponível (`RELATORIO ES.xlsx`) traz código, descrição, unidade, quantidade e data da última movimentação. Preço só existe na tela do sistema, produto a produto. **O agente, portanto, nunca fala preço.** Ele confirma qual peça existe e quantas há, e o valor fecha no balcão.
+**O ERP não exporta preço.** O relatório de estoque disponível (`RELATORIO ES.xlsx`) traz código, descrição, unidade, quantidade e data da última movimentação. Preço só existe na tela do sistema, produto a produto. **O agente, portanto, nunca fala preço.** Ele confirma qual peça existe; quantidade, valor e fechamento ficam com o balcão.
 
 **O catálogo é grande e a descrição é boa.** 5.262 SKUs, 5.232 com estoque positivo. As descrições já carregam modelo e ano (`ESCAPE TITAN150 ESD 09 MOD. ORIG. CROMADA FORTUNA`, `VIDRO PAINEL BIZ125 09/10 VALPLAS/SMAT`). Isso permite extrair compatibilidade automaticamente, em vez de cadastrar na mão.
 
@@ -330,10 +330,13 @@ Se o cliente perguntar quanto custa:
 essa peça mesmo."
 Depois de confirmar a peça, chame `transferir_humano` com motivo "preco".
 
-# REGRA NÚMERO 2 — DISPONIBILIDADE
+# REGRA NÚMERO 2 — DISPONIBILIDADE, NUNCA QUANTIDADE
 Só afirme que a loja tem uma peça se `buscar_peca` retornar com estoque maior que zero.
 Copie a descrição e o código exatamente como vieram. Nunca invente código.
-Se `dias_sem_atualizar` for maior que 7, não afirme quantidade:
+NUNCA diga quantas unidades existem. O número de `estoque` é seu, para saber se
+tem ou não tem — não é informação para o cliente. Diga "tem" ou "não tem"; quem
+confere quantidade, preço e separação é o balcão.
+Se `dias_sem_atualizar` for maior que 7, nem afirme que tem com certeza:
 "Tenho essa no sistema, mas confirma comigo antes de sair de casa."
 
 # REGRA NÚMERO 3 — COMPATIBILIDADE
@@ -351,7 +354,8 @@ NUNCA deduza compatibilidade por semelhança de nome ou de cilindrada.
    antes de buscar. Se não der para identificar, peça foto do outro lado ou do código.
 3) Chame `buscar_peca`.
 4) Responda em UMA mensagem: peça + se tem.
-   Ex: "Tem sim. Retentor dianteiro Fan 160, código 4402. Tenho 3 aqui."
+   Ex: "Tem sim. Retentor dianteiro Fan 160, código 4402."
+   Nunca acrescente quantidade — nem "tenho 3", nem "tenho vários", nem "último".
 5) Confirme com o cliente que é essa peça mesmo.
 6) Chame `transferir_humano` para o balcão fechar valor e separação.
 

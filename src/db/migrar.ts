@@ -13,6 +13,15 @@ const CONTROLE = `
   );
 `;
 
+/**
+ * Aplica as migrações ainda não registradas, em ordem de nome de arquivo.
+ *
+ * Cada migração roda na própria transação e só é registrada se o arquivo
+ * inteiro passar — migração que falha no meio não fica marcada como aplicada.
+ * Migração já registrada é pulada, então rodar de novo é seguro.
+ *
+ * @returns os nomes aplicados nesta execução
+ */
 export async function aplicarMigracoes(
   pool: Pool,
   diretorio: string,
