@@ -16,7 +16,10 @@ export interface DepsServidor {
    * aqui significaria um gateway que responde 200 e não atende ninguém, e o
    * sintoma só apareceria em produção.
    */
-  atender: (corpo: unknown) => Promise<void>;
+  // O retorno é ignorado aqui: quem hospeda processo sempre ligado deixa o
+  // debounce em memória agendar o turno. A função serverless usa o id que
+  // `atender` devolve para esperar a janela pelo banco.
+  atender: (corpo: unknown) => Promise<unknown>;
   /** Log estruturado do Fastify. Desligado no teste, ligado em produção. */
   log?: boolean;
 }

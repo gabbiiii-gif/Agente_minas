@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Pool } from "pg";
 import { lerEvento } from "./payload.js";
-import { criarDebounce } from "./debounce.js";
+import { criarDebounce, type Debounce } from "./debounce.js";
 import { resolverContato, silenciarPorHumano } from "../conversa/contatos.js";
 import {
   conversaAtiva,
@@ -23,13 +23,26 @@ export interface DepsAtendimento {
   evolution: ConfigEvolution;
   /** Janela do debounce. O teste passa 0 para disparar na hora. */
   esperaDebounceMs?: number;
+  /**
+   * Quem agenda o turno. O padrao e o debounce em memoria, que so serve a
+   * processo sempre ligado. Em serverless passa-se um que nao faz nada e
+   * quem agenda e o proprio handler, com `esperarVez` — ver `janela.ts`.
+   */
+  debounce?: Debounce;
   /** Para onde vai o alerta quando o turno falha. null = ninguém é avisado. */
   telefoneDono?: string | null;
 }
 
 export interface Atendimento {
-  /** Trata um webhook do Evolution, do começo ao ponto em que agenda o turno. */
-  atender(corpo: unknown): Promise<void>;
+  /**
+   * Trata um webhook do Evolution ate a decisao de responder.
+   *
+   * Devolve o id da conversa quando o bot deve responder, e null quando nao
+   * deve. Quem hospeda decide o que fazer com isso: o processo sempre ligado
+   * entrega ao debounce em memoria, a funcao serverless espera a janela pelo
+   * banco e roda o turno na mesma invocacao.
+   */
+  atender(corpo: unknown): Promise<string | null>;
   /** Roda o turno de uma conversa. Normalmente quem chama é o debounce. */
   responderTurno(conversaId: string): Promise<void>;
   /** Quantos turnos estão agendados. Serve ao teste e a um healthcheck futuro. */
@@ -80,9 +93,9 @@ async function dadosDaConversa(pool: Pool, conversaId: string): Promise<DadosCon
  * calada) e só então decidir se o bot responde.
  */
 export function criarAtendimento(deps: DepsAtendimento): Atendimento {
-  const debounce = criarDebounce(deps.esperaDebounceMs ?? 8000, (conversaId) =>
-    responderTurno(conversaId),
-  );
+  const debounce =
+    deps.debounce ??
+    criarDebounce(deps.esperaDebounceMs ?? 8000, (conversaId) => responderTurno(conversaId));
 
   /**
    * Foto que chegou e ainda não entrou num turno, por conversa.
@@ -102,11 +115,11 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
     }
   }
 
-  async function atender(corpo: unknown): Promise<void> {
+  async function atender(corpo: unknown): Promise<string | null> {
     const evento = lerEvento(corpo);
     if ("descartar" in evento) {
       console.log(`webhook descartado: ${evento.descartar}`);
-      return;
+      return null;
     }
 
     const contato = await resolverContato(deps.pool, evento.telefone, evento.nome);
@@ -127,7 +140,7 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
       });
       await silenciarPorHumano(deps.pool, contato.id);
       await marcarStatus(deps.pool, conversa.id, "aguardando_humano");
-      return;
+      return null;
     }
 
     const nova = await gravarMensagem(deps.pool, {
@@ -140,7 +153,7 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
 
     // Webhook repetido: o Evolution reenvia quando não recebe 200 a tempo.
     // Responder duas vezes é o erro que o cliente percebe na hora.
-    if (!nova) return;
+    if (!nova) return null;
 
     if (evento.tipo === "imagem") {
       fotosPendentes.set(conversa.id, {
@@ -161,13 +174,13 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
 
     if (veredito.acao === "responder") {
       debounce.registrar(conversa.id);
-      return;
+      return conversa.id;
     }
 
     // O motivo vai para o log sempre: é como se descobre que o kill switch
     // está ligado, ou que o teto encheu, sem abrir o banco.
     console.log(`sem resposta automática na conversa ${conversa.id}: ${veredito.motivo}`);
-    if (veredito.acao === "calar") return;
+    if (veredito.acao === "calar") return null;
 
     await marcarStatus(deps.pool, conversa.id, "aguardando_humano", {
       desfecho: "handoff",
@@ -179,6 +192,8 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
     if (veredito.acao === "entregar_avisando") {
       await enviar(deps.pool, deps.evolution, evento.telefone, FRASE_BALCAO);
     }
+
+    return null;
   }
 
   async function responderTurno(conversaId: string): Promise<void> {
