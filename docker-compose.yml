@@ -4,6 +4,36 @@
 # o webhook aponta. O postgres e o redis daqui são de uso interno do Evolution
 # (sessão, mensagens, cache) e não têm relação com o Supabase do agente.
 services:
+  # O agente. Sobe junto do Evolution e fala com ele pela rede interna do
+  # compose, por isso EVOLUTION_URL aponta para o nome do servico e nao para
+  # localhost. O banco do agente e o Supabase, de fora daqui.
+  agente:
+    build: .
+    restart: always
+    ports:
+      - "${PORTA:-3000}:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      EVOLUTION_URL: http://evolution:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      EVOLUTION_INSTANCIA: ${EVOLUTION_INSTANCIA:-minas}
+      WEBHOOK_SEGREDO: ${WEBHOOK_SEGREDO}
+      TELEFONE_DONO: ${TELEFONE_DONO}
+      PORTA: 3000
+    healthcheck:
+      # `restart: always` sozinho so cobre processo morto. O healthcheck pega
+      # o processo vivo e travado, que e o jeito pior de o atendimento cair:
+      # o Evolution segue entregando webhook e ninguem responde.
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/saude"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      evolution:
+        condition: service_started
+
   evolution:
     image: evoapicloud/evolution-api:v2.3.0
     restart: unless-stopped
