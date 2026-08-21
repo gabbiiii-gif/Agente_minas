@@ -73,7 +73,11 @@ function usoZerado(): Uso {
  * frase, uma mensagem em branco ou silêncio.
  */
 function chamarBalcao(motivo: string, resumo: string, uso: Uso): Turno {
-  return { texto: FRASE_HANDOFF, handoff: { tipo: "handoff", motivo, resumo }, ...uso };
+  return {
+    texto: FRASE_HANDOFF,
+    handoff: { tipo: "handoff", motivo, resumo, origem: "laco" },
+    ...uso,
+  };
 }
 
 /**

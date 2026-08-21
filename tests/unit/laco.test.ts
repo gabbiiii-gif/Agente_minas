@@ -223,7 +223,12 @@ describe("responder — ferramentas", () => {
       deps(anthropic, {
         executar: async () => ({
           resultado: { transferido: true },
-          efeito: { tipo: "handoff", motivo: "preco", resumo: "Biz — pastilha — falta o valor" },
+          efeito: {
+            tipo: "handoff",
+            motivo: "preco",
+            resumo: "Biz — pastilha — falta o valor",
+            origem: "ferramenta",
+          },
         }),
       }),
       PERGUNTA,

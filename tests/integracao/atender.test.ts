@@ -51,6 +51,45 @@ function anthropicFalso(texto = "Tem sim. Retentor dianteiro Titan 160, código 
   } as unknown as Anthropic;
 }
 
+/**
+ * Modelo falso que usa ferramentas, em sequência.
+ *
+ * Serve aos testes do funil: `intencao` e `desfecho` só são escritos quando
+ * as ferramentas rodam, e são as duas colunas que o relatório do piloto mede.
+ */
+function anthropicComFerramentas(
+  sequencia: Array<{ nome: string; entrada: Record<string, unknown> }>,
+) {
+  let i = 0;
+  return {
+    messages: {
+      create: async () => {
+        const passo = sequencia[Math.min(i, sequencia.length - 1)];
+        i += 1;
+        const acabou = i > sequencia.length;
+        return {
+          id: "msg_teste",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-5",
+          content: acabou
+            ? [{ type: "text", text: "Já chamei o balcão.", citations: null }]
+            : [{ type: "tool_use", id: `t${i}`, name: passo!.nome, input: passo!.entrada }],
+          stop_reason: acabou ? "end_turn" : "tool_use",
+          stop_sequence: null,
+          stop_details: null,
+          usage: {
+            input_tokens: 5,
+            output_tokens: 5,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+      },
+    },
+  } as unknown as Anthropic;
+}
+
 descrever("atendimento", () => {
   let pool: Pool;
   let enviados: Array<{ number: string; text: string }>;
@@ -219,6 +258,61 @@ descrever("atendimento", () => {
     expect(enviados).toHaveLength(1);
     expect(enviados[0]!.number).toBe(tel(7));
     expect(enviados[0]!.text).toContain("4402");
+    a.encerrar();
+  });
+
+  /** Lê as duas colunas do funil que o relatório do piloto conta. */
+  const funil = async (conversaId: string) => {
+    const { rows } = await pool.query(
+      "select intencao, desfecho from agente.conversas where id = $1",
+      [conversaId],
+    );
+    return rows[0]!;
+  };
+
+  it("conta como qualificada a conversa que achou a peça e foi fechar valor", async () => {
+    const a = novo(
+      anthropicComFerramentas([
+        { nome: "buscar_peca", entrada: { texto: "pastilha de freio" } },
+        {
+          nome: "transferir_humano",
+          entrada: { motivo: "preco", resumo: "Biz 125 — pastilha — falta passar o valor" },
+        },
+      ]),
+    );
+
+    await a.atender(eventoTexto(tel(10), "J-1"));
+    const conversa = await conversaDe(tel(10));
+    await a.responderTurno(conversa.id);
+
+    // É o atendimento dando certo, não desistência: o agente qualificou o
+    // pedido e o balcão só fecha o valor. Sem esta distinção, o funil do
+    // piloto não sabe dizer se o projeto está servindo para alguma coisa.
+    expect(await funil(conversa.id)).toMatchObject({
+      intencao: "peca",
+      desfecho: "qualificou",
+    });
+    a.encerrar();
+  });
+
+  it("não conta como qualificada a reclamação que nunca virou pedido", async () => {
+    const a = novo(
+      anthropicComFerramentas([
+        {
+          nome: "transferir_humano",
+          entrada: { motivo: "reclamacao", resumo: "Cliente reclamando de peça queimada" },
+        },
+      ]),
+    );
+
+    await a.atender(eventoTexto(tel(11), "K-1", "comprei ontem e já queimou"));
+    const conversa = await conversaDe(tel(11));
+    await a.responderTurno(conversa.id);
+
+    expect(await funil(conversa.id)).toMatchObject({
+      intencao: null,
+      desfecho: "handoff",
+    });
     a.encerrar();
   });
 

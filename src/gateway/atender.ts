@@ -228,10 +228,11 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
 
       await enviar(deps.pool, deps.evolution, dados.telefone, turno.texto);
 
-      // `transferir_humano` já marcou a conversa lá dentro; isto cobre os
-      // handoffs que o próprio laço decide (resposta truncada, recusa,
-      // cinco passos sem fechar), que não passam por ferramenta nenhuma.
-      if (turno.handoff) {
+      // Só os handoffs que o próprio laço decide (resposta truncada, recusa,
+      // cinco passos sem fechar) são gravados aqui. Os que vêm de
+      // `transferir_humano` a ferramenta já gravou, e regravar apagaria o
+      // desfecho 'qualificou' que ela calcula — que é a métrica do piloto.
+      if (turno.handoff?.origem === "laco") {
         await marcarStatus(deps.pool, conversaId, "aguardando_humano", {
           desfecho: "handoff",
           resumo: turno.handoff.resumo,

@@ -7,8 +7,20 @@ export interface ContextoFerramenta {
   contatoId: string | null;
 }
 
-/** Efeito colateral que o laço precisa conhecer para decidir se para. */
-export type Efeito = { tipo: "handoff"; motivo: string; resumo: string };
+/**
+ * Efeito colateral que o laço precisa conhecer para decidir se para.
+ *
+ * `origem` diz quem pediu o handoff: a ferramenta `transferir_humano` (o
+ * modelo decidiu) ou o próprio laço (resposta truncada, recusa, cinco passos
+ * sem fechar). O gateway usa isso para não sobrescrever o desfecho que a
+ * ferramenta já gravou — ver `atender.ts`.
+ */
+export type Efeito = {
+  tipo: "handoff";
+  motivo: string;
+  resumo: string;
+  origem: "ferramenta" | "laco";
+};
 
 /**
  * Diferença de score abaixo da qual duas opções são "parecidas demais".
@@ -83,6 +95,26 @@ async function ferramentaIdentificarMoto(pool: Pool, entrada: any) {
 }
 
 /**
+ * Anota do que a conversa tratou, na primeira vez que der para saber.
+ *
+ * Primeira intenção ganha (`is null` no where): cliente que pergunta de peça
+ * e depois puxa assunto de oficina continua sendo uma conversa de peça para
+ * o funil. Sem isto, a coluna `buscaram_peca` do relatório do piloto fica
+ * zerada e não dá para saber se o agente está servindo para alguma coisa.
+ */
+async function marcarIntencao(
+  pool: Pool,
+  conversaId: string | null,
+  intencao: "peca" | "servico",
+): Promise<void> {
+  if (!conversaId) return;
+  await pool.query(
+    "update agente.conversas set intencao = $2 where id = $1 and intencao is null",
+    [conversaId, intencao],
+  );
+}
+
+/**
  * Executa a ferramenta que o modelo pediu.
  *
  * Nunca lança para o laço: erro vira resultado com `erro`, para o modelo
@@ -97,8 +129,10 @@ export async function executarFerramenta(
 ): Promise<{ resultado: unknown; efeito?: Efeito }> {
   try {
     switch (nome) {
-      case "buscar_peca":
+      case "buscar_peca": {
+        await marcarIntencao(pool, ctx.conversaId, "peca");
         return { resultado: await ferramentaBuscarPeca(pool, entrada) };
+      }
 
       case "identificar_moto":
         return { resultado: await ferramentaIdentificarMoto(pool, entrada) };
@@ -120,6 +154,7 @@ export async function executarFerramenta(
       }
 
       case "abrir_servico": {
+        await marcarIntencao(pool, ctx.conversaId, "servico");
         // A v1 não tem tabela de serviço: registrar como demanda mantém o
         // pedido visível ao dono e evita migração antes da hora.
         await pool.query(
@@ -139,16 +174,27 @@ export async function executarFerramenta(
         const motivo = String(entrada?.motivo ?? "fora_escopo");
         const resumo = String(entrada?.resumo ?? "");
         if (ctx.conversaId) {
+          // O desfecho sai daqui decidido pelo estado da própria linha:
+          // conversa que buscou peça e vai ao balcão fechar valor é o
+          // atendimento dando certo ('qualificou'), não um handoff de
+          // desistência. É essa distinção que o funil do piloto mede — sem
+          // ela, duas das quatro colunas do relatório ficam zeradas.
           await pool.query(
             `update agente.conversas
-                set status = 'aguardando_humano', desfecho = 'handoff', resumo = $2
+                set status = 'aguardando_humano',
+                    desfecho = case
+                      when intencao = 'peca' and $3 in ('preco','desconto')
+                        then 'qualificou'
+                      else 'handoff'
+                    end,
+                    resumo = $2
               where id = $1`,
-            [ctx.conversaId, resumo],
+            [ctx.conversaId, resumo, motivo],
           );
         }
         return {
           resultado: { transferido: true },
-          efeito: { tipo: "handoff", motivo, resumo },
+          efeito: { tipo: "handoff", motivo, resumo, origem: "ferramenta" },
         };
       }
 

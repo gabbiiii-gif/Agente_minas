@@ -100,6 +100,7 @@ descrever("aceite — conversa com o modelo real", () => {
                   tipo: "handoff" as const,
                   motivo: String(e.motivo ?? "fora_escopo"),
                   resumo: String(e.resumo ?? ""),
+                  origem: "ferramenta" as const,
                 },
               };
             }
