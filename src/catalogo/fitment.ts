@@ -55,6 +55,10 @@ Para cada descrição, extraia os modelos de moto em que a peça se aplica.
 Regras:
 - Modelo em minúsculas, sem cilindrada junto: "TITAN 150" vira {"modelo":"titan","cilindrada":150}.
 - Barra separa modelos: "TITAN/XLR/XR" são três modelos distintos.
+- Sufixo de versão não faz parte do modelo: ES, ESD, KS, EX, CDI, FLEX, START e ADV
+  são acabamentos. "TITAN ES" vira {"modelo":"titan","cilindrada":null}. O catálogo
+  de motos guarda só o modelo base, então versão junto não casa com nada e a peça
+  fica sem compatibilidade nenhuma.
 - Sem cilindrada explícita, use null.
 - Nome de fabricante da peça (FORTUNA, VEDAMOTORS, NGK, FABRECK, COSER, MHX, SCT) não é modelo de moto.
 - Peça universal, sem modelo nenhum, devolve lista vazia.
