@@ -29,7 +29,10 @@ const ESPERA_MS = Number(env("DEBOUNCE_MS") || 8000);
  * O miolo só chama `query(sql, params)` e lê `rows`. O adaptador existe para
  * não ter que tocar em nenhum dos arquivos compartilhados.
  */
-const poolDeno = new PoolDeno(env("DATABASE_URL"), 3, true);
+// `SUPABASE_DB_URL` é injetada pelo próprio runtime e aponta para o banco do
+// projeto — um segredo a menos para configurar e para errar. `DATABASE_URL`
+// existe para rodar a função localmente contra o Postgres de teste.
+const poolDeno = new PoolDeno(env("DATABASE_URL") || env("SUPABASE_DB_URL"), 3, true);
 
 const pool = {
   async query(texto: string, params: unknown[] = []) {

@@ -1,0 +1,10 @@
+# Configuração do CLI do Supabase.
+#
+# O projeto usa as migrações e seeds daqui desde a fundação; este arquivo só
+# apareceu quando passamos a publicar a Edge Function.
+project_id = "minas-agente"
+
+[functions.whatsapp-webhook]
+# Quem chama é o Evolution, que não tem JWT do Supabase. A autenticação do
+# webhook é o WEBHOOK_SEGREDO, conferido dentro da própria função.
+verify_jwt = false
