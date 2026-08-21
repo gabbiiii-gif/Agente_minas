@@ -64,30 +64,40 @@ function paginaQr(base64: string): string {
 </div></body></html>`;
 }
 
-// A instância pode já existir de uma tentativa anterior; criar de novo devolve
-// 403 e isso não é erro — só significa "já está lá".
-const criacao = await api("/instance/create", {
-  method: "POST",
-  body: JSON.stringify({
-    instanceName: INSTANCIA,
-    integration: "WHATSAPP-BAILEYS",
-    qrcode: true,
-  }),
-});
+// Estado primeiro, criação só se precisar.
+//
+// A instância pode já existir — de uma tentativa anterior ou criada à mão no
+// Manager. E num Evolution compartilhado a chave costuma ser a da instância,
+// que não tem permissão para criar nada: pedir a criação antes de olhar o
+// estado derrubaria o script com 401 numa instância que está lá, inteira.
+const estadoInicial = await estado();
 
-if (criacao.status >= 400 && !JSON.stringify(criacao.corpo).includes("already in use")) {
-  console.error("Falha ao criar instância:", JSON.stringify(criacao.corpo).slice(0, 300));
-  process.exit(1);
-}
-
-const jaConectado = await estado();
-if (jaConectado === "open") {
+if (estadoInicial === "open") {
   console.log(`A instância "${INSTANCIA}" já está conectada. Nada a fazer.`);
   process.exit(0);
 }
 
-let qr: string | undefined =
-  criacao.corpo?.qrcode?.base64 ?? criacao.corpo?.base64;
+let qr: string | undefined;
+
+if (estadoInicial === "desconhecido") {
+  console.log(`Instância "${INSTANCIA}" não existe neste servidor. Criando...`);
+  const criacao = await api("/instance/create", {
+    method: "POST",
+    body: JSON.stringify({
+      instanceName: INSTANCIA,
+      integration: "WHATSAPP-BAILEYS",
+      qrcode: true,
+    }),
+  });
+
+  if (criacao.status >= 400 && !JSON.stringify(criacao.corpo).includes("already in use")) {
+    console.error("Falha ao criar instância:", JSON.stringify(criacao.corpo).slice(0, 300));
+    console.error("Se a chave for da instância, e não global, crie pelo Manager e rode de novo.");
+    process.exit(1);
+  }
+
+  qr = criacao.corpo?.qrcode?.base64 ?? criacao.corpo?.base64;
+}
 
 if (!qr) {
   const conexao = await api(`/instance/connect/${INSTANCIA}`);
