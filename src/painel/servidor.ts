@@ -1,12 +1,14 @@
-// Painel de configuração do agente.
+// Painel de controle do agente.
 //
-// Serve para o dono ajustar o atendimento sem mexer em código: liga e desliga
-// o bot, muda horário e endereço, edita as instruções e testa o resultado
-// contra o catálogo real antes de salvar.
+// O dono ajusta o atendimento, lê as conversas e assume o comando sem mexer
+// em código: liga e desliga o bot, muda horário e endereço, edita as
+// instruções, testa antes de salvar, e desliga a IA de uma conversa
+// específica quando quer atender ele mesmo.
 //
-// Escuta só em 127.0.0.1 de propósito — não tem senha, então não pode ficar
-// exposto. Na VPS, acesse por túnel SSH:
-//   ssh -L 3001:localhost:3001 usuario@servidor
+// As rotas são finas de propósito: quem faz o trabalho é `acoes.ts`, que
+// serve tanto este Fastify quanto as funções serverless da Vercel. Se a
+// lógica morasse aqui, existiria duas vezes e divergiria na primeira
+// correção.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,105 +17,94 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Pool } from "pg";
 import { criarPool } from "../db/pool.js";
 import { lerEnv } from "../config/env.js";
+import type { ConfigLoja } from "../config/loja.js";
+import { senhaConfere, criarCookie, cookieDeSaida, sessaoValida } from "./auth.js";
 import {
-  lerConfig,
-  gravarConfig,
-  promptPadrao,
-  promptEfetivo,
-  type ConfigLoja,
-} from "../config/loja.js";
-import { montarContexto } from "../agente/prompt.js";
-import { responder, type Fala } from "../agente/laco.js";
-import { executarFerramenta } from "../ferramentas/executar.js";
+  acaoLerConfig,
+  acaoGravarConfig,
+  acaoListarConversas,
+  acaoLerConversa,
+  acaoAlternarIa,
+  acaoMetricas,
+  acaoTestar,
+} from "./acoes.js";
 
 // ESM não tem __dirname; o HTML mora ao lado deste arquivo.
 const AQUI = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Rotas que existem justamente para quem ainda não entrou.
+ *
+ * `/api/sessao` precisa estar aqui: é ela que a tela consulta para decidir
+ * entre mostrar o login e mostrar o painel. Protegida, responderia 401 a
+ * quem ainda não entrou — que é exatamente a pergunta que ela responde.
+ */
+const LIVRES = new Set(["/api/entrar", "/api/sair", "/api/sessao"]);
+
 export async function criarPainel(pool: Pool, anthropic: Anthropic) {
   const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 });
+
+  // Uma guarda só, em vez de repetir a checagem em cada rota: rota nova nasce
+  // protegida por padrão, e esquecer de proteger é o erro que não se percebe.
+  app.addHook("onRequest", async (req, resp) => {
+    const caminho = req.url.split("?")[0]!;
+    if (!caminho.startsWith("/api/") || LIVRES.has(caminho)) return;
+    if (!sessaoValida(req.headers.cookie)) {
+      return resp.code(401).send({ erro: "sessão expirada" });
+    }
+  });
 
   app.get("/", async (_req, resp) => {
     resp.type("text/html; charset=utf-8");
     return readFileSync(join(AQUI, "painel.html"), "utf8");
   });
 
-  app.get("/api/config", async () => {
-    const cfg = await lerConfig(pool, false);
-    return { ...cfg, promptPadrao: promptPadrao(cfg) };
+  app.post("/api/entrar", async (req, resp) => {
+    const { senha } = (req.body ?? {}) as { senha?: string };
+    if (!senhaConfere(String(senha ?? ""))) {
+      return resp.code(401).send({ erro: "senha incorreta" });
+    }
+    return resp.header("set-cookie", criarCookie()).send({ ok: true });
   });
+
+  app.post("/api/sair", async (_req, resp) => {
+    return resp.header("set-cookie", cookieDeSaida()).send({ ok: true });
+  });
+
+  /** Diz à tela se já há sessão, para ela decidir entre login e painel. */
+  app.get("/api/sessao", async (req) => ({ entrou: sessaoValida(req.headers.cookie) }));
+
+  app.get("/api/config", async () => acaoLerConfig(pool));
 
   app.put("/api/config", async (req, resp) => {
-    const c = req.body as Partial<ConfigLoja>;
-
-    // Validação mínima, para o painel não gravar algo que derrube o agente.
-    if (c.tetoContatosNovosHora !== undefined && !(c.tetoContatosNovosHora > 0)) {
-      return resp.code(400).send({ erro: "teto de contatos novos precisa ser maior que zero" });
-    }
-    if (c.maxMensagensConversa !== undefined && !(c.maxMensagensConversa >= 5)) {
-      return resp.code(400).send({ erro: "limite de mensagens precisa ser pelo menos 5" });
-    }
-    if (c.promptCustomizado !== undefined && c.promptCustomizado !== null
-        && c.promptCustomizado.trim().length < 200) {
-      return resp.code(400).send({
-        erro: "instruções curtas demais — se quer voltar ao padrão, use o botão Restaurar",
-      });
-    }
-
-    await gravarConfig(pool, c);
-    return { ok: true };
+    const r = await acaoGravarConfig(pool, req.body as Partial<ConfigLoja>);
+    return "erro" in r ? resp.code(400).send(r) : r;
   });
 
-  app.get("/api/metricas", async () => {
-    const um = async (sql: string) =>
-      Number((await pool.query<{ n: string }>(sql)).rows[0]!.n);
-    return {
-      produtos: await um("select count(*)::text as n from agente.produtos where ativo"),
-      comFitment: await um("select count(distinct produto_id)::text as n from agente.produto_moto"),
-      motos: await um("select count(*)::text as n from agente.motos"),
-      demandas: await um(
-        "select count(*)::text as n from agente.demanda_nao_atendida where criado_em > now() - interval '30 days'",
-      ),
-    };
+  app.get("/api/metricas", async () => acaoMetricas(pool));
+
+  app.get("/api/conversas", async (req) => {
+    const { busca } = req.query as { busca?: string };
+    return acaoListarConversas(pool, busca ?? "");
   });
 
-  /**
-   * Roda um turno com o prompt que está na tela, não com o que está salvo.
-   * É o que permite testar uma mudança antes de ela valer para o cliente.
-   */
+  app.get("/api/conversas/:id", async (req, resp) => {
+    const { id } = req.params as { id: string };
+    const r = await acaoLerConversa(pool, id);
+    return "erro" in r ? resp.code(404).send(r) : r;
+  });
+
+  app.post("/api/conversas/:id/ia", async (req, resp) => {
+    const { id } = req.params as { id: string };
+    const { ativa } = (req.body ?? {}) as { ativa?: boolean };
+    const r = await acaoAlternarIa(pool, id, ativa === true);
+    return "erro" in r ? resp.code(404).send(r) : r;
+  });
+
   app.post("/api/testar", async (req, resp) => {
-    const corpo = req.body as { mensagem?: string; prompt?: string; historico?: Fala[] };
-    const mensagem = String(corpo.mensagem ?? "").trim();
-    if (mensagem === "") return resp.code(400).send({ erro: "mensagem vazia" });
-
-    const cfg = await lerConfig(pool, false);
-    // Sem texto na tela, testa o que está valendo de verdade para o cliente
-    // (o customizado, se o dono salvou um) — não o padrão do código.
-    const prompt =
-      corpo.prompt && corpo.prompt.trim() !== "" ? corpo.prompt : promptEfetivo(cfg);
-
-    const historico: Fala[] = Array.isArray(corpo.historico) ? corpo.historico : [];
-    if (historico.at(-1)?.conteudo !== mensagem) {
-      historico.push({ papel: "cliente", conteudo: mensagem });
-    }
-
-    const ferramentas: string[] = [];
     try {
-      const turno = await responder(
-        {
-          anthropic,
-          prompt,
-          // O mesmo contexto que a produção manda, para o teste não responder
-          // com uma data diferente da que o cliente veria.
-          contexto: montarContexto({ agora: new Date(), nome: null, moto: null }),
-          // conversaId null: teste do painel não entra no funil de métricas.
-          executar: (nome, entrada) =>
-            executarFerramenta(pool, { conversaId: null, contatoId: null }, nome, entrada),
-          aoUsarFerramenta: (nome, entrada) =>
-            ferramentas.push(`${nome}(${JSON.stringify(entrada)})`),
-        },
-        historico,
-      );
-      return { ...turno, ferramentas };
+      const r = await acaoTestar(pool, anthropic, req.body as Parameters<typeof acaoTestar>[2]);
+      return "erro" in r ? resp.code(400).send(r) : r;
     } catch (erro) {
       return resp.code(500).send({ erro: (erro as Error).message });
     }

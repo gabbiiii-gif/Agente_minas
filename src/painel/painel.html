@@ -100,6 +100,38 @@
     padding-left: 10px; margin: 6px 0; overflow-x: auto;
   }
   .vazio { color: var(--suave); font-size: 13px; }
+  .abas { display: flex; gap: 6px; margin-bottom: 16px; }
+  .aba {
+    font-weight: 600; padding: 8px 16px; border-radius: 7px;
+    border: 1px solid transparent; background: transparent; color: var(--suave);
+  }
+  .aba.ativa { background: var(--papel); border-color: var(--borda); color: var(--texto); }
+  .lista { margin-top: 14px; }
+  .item {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 11px 12px; border: 1px solid var(--borda); border-radius: 7px;
+    background: var(--papel); margin-bottom: 7px; cursor: pointer;
+  }
+  .item:hover { border-color: var(--acento); }
+  .item.aberta { border-color: var(--acento); }
+  .item .quemE { flex: 1 1 auto; min-width: 0; }
+  .item .nome { font-weight: 600; }
+  .item .tel { font-size: 12px; color: var(--suave); }
+  .item .quando { font-size: 12px; color: var(--suave); white-space: nowrap; }
+  .etiqueta {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+  }
+  .etiqueta.ia { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+  .etiqueta.humano { background: color-mix(in srgb, var(--alerta) 18%, transparent); color: var(--alerta); }
+  .etiqueta.fim { background: color-mix(in srgb, var(--suave) 15%, transparent); color: var(--suave); }
+  .cabecalhoConversa { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+  .cabecalhoConversa h2 { margin: 0; }
+  .balao.humano .quem { color: var(--alerta); }
+  input[type=password] {
+    width: 100%; padding: 9px 11px; font: inherit; color: var(--texto);
+    background: var(--fundo); border: 1px solid var(--borda); border-radius: 7px;
+  }
 </style>
 </head>
 <body>
@@ -107,8 +139,60 @@
 
   <header>
     <h1>Minas Auto Peças — painel do agente</h1>
-    <div class="sub">Ajuste o atendimento sem mexer em código. O que você salva aqui vale em até um minuto.</div>
+    <div class="sub">Leia as conversas, assuma quando precisar e ajuste o atendimento sem mexer em código.</div>
   </header>
+
+  <div class="cartao" id="telaLogin" hidden>
+    <h2>Entrar</h2>
+    <p class="dica">O painel mostra conversa de cliente. Só entra quem tem a senha.</p>
+    <label for="senha">Senha</label>
+    <input type="password" id="senha" autocomplete="current-password">
+    <div class="acoes">
+      <button class="primario" id="entrar">Entrar</button>
+      <span class="recado" id="recadoLogin"></span>
+    </div>
+  </div>
+
+<div id="telaPainel" hidden>
+
+  <nav class="abas">
+    <button class="aba ativa" data-aba="conversas">Conversas</button>
+    <button class="aba" data-aba="config">Configuração</button>
+    <span style="flex:1"></span>
+    <button id="sair">Sair</button>
+  </nav>
+
+  <section id="abaConversas">
+    <div class="cartao">
+      <div class="cabecalhoConversa">
+        <h2>Conversas</h2>
+        <span style="flex:1"></span>
+        <button id="atualizar">Atualizar</button>
+      </div>
+      <p class="dica">Durante o piloto, leia todas, todo dia. Procure por preço dito, quantidade dita, compatibilidade afirmada sem confirmação e código inventado.</p>
+      <input type="text" id="buscaConversa" placeholder="nome ou telefone">
+      <div class="lista" id="listaConversas"><span class="vazio">carregando…</span></div>
+    </div>
+
+    <div class="cartao" id="detalhe" hidden>
+      <div class="cabecalhoConversa">
+        <h2 id="detalheNome"></h2>
+        <span class="etiqueta" id="detalheEtiqueta"></span>
+      </div>
+      <p class="dica" id="detalheSub"></p>
+      <div class="chave">
+        <label class="interruptor" style="margin:0">
+          <input type="checkbox" id="iaConversa">
+          <span class="trilho"></span>
+        </label>
+        <span class="estado" id="estadoIa"></span>
+      </div>
+      <p class="dica" style="margin-top:10px">Desligar aqui cala o agente só nesta conversa, por 6 horas, e marca que o balcão assumiu.</p>
+      <div class="conversa" id="historicoConversa"></div>
+    </div>
+  </section>
+
+<section id="abaConfig" hidden>
 
   <div class="cartao">
     <h2>Atendimento automático</h2>
@@ -183,12 +267,153 @@
     <span class="recado" id="recadoSalvar"></span>
   </div>
 
+</section>
+</div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let padraoDoSistema = "";
 let historico = [];
+let conversaAberta = null;
+let recarga = null;
+
+/**
+ * Toda chamada passa por aqui para que 401 tenha um lugar só.
+ * Sessão vence em 12h, e ela vencer no meio do uso é normal — o certo é
+ * voltar ao login, não quebrar a tela com erro.
+ */
+async function api(caminho, init) {
+  const r = await fetch(caminho, init);
+  if (r.status === 401) { mostrarLogin(); throw new Error("sessão expirada"); }
+  return r;
+}
+
+const escapar = (t) => String(t ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+
+const quando = (iso) => {
+  const d = new Date(iso);
+  const hoje = new Date().toDateString() === d.toDateString();
+  return hoje
+    ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+};
+
+function mostrarLogin() {
+  clearInterval(recarga);
+  $("telaLogin").hidden = false;
+  $("telaPainel").hidden = true;
+  $("senha").focus();
+}
+
+function mostrarPainel() {
+  $("telaLogin").hidden = true;
+  $("telaPainel").hidden = false;
+  carregar();
+  carregarConversas();
+  // O piloto é acompanhado ao vivo; 20s é suficiente para não parecer parado
+  // e leve o bastante para o banco não sentir.
+  recarga = setInterval(() => { if (!$("abaConversas").hidden) carregarConversas(); }, 20000);
+}
+
+async function entrar() {
+  $("entrar").disabled = true;
+  try {
+    const r = await fetch("/api/entrar", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ senha: $("senha").value }),
+    });
+    if (!r.ok) throw new Error("senha incorreta");
+    $("senha").value = "";
+    mostrarPainel();
+  } catch (e) {
+    recado($("recadoLogin"), e.message, "erro");
+  } finally {
+    $("entrar").disabled = false;
+  }
+}
+
+async function sair() {
+  await fetch("/api/sair", { method: "POST" });
+  mostrarLogin();
+}
+
+async function carregarConversas() {
+  const busca = encodeURIComponent($("buscaConversa").value.trim());
+  const lista = await (await api("/api/conversas?busca=" + busca)).json();
+  const el = $("listaConversas");
+
+  if (lista.length === 0) {
+    el.innerHTML = '<span class="vazio">Nenhuma conversa ainda. A primeira aparece assim que um cliente escrever.</span>';
+    return;
+  }
+
+  el.innerHTML = lista.map((c) => {
+    const et = c.status === "encerrada"
+      ? '<span class="etiqueta fim">encerrada</span>'
+      : c.iaAtiva ? '<span class="etiqueta ia">IA</span>'
+                  : '<span class="etiqueta humano">balcão</span>';
+    return `<button class="item ${c.id === conversaAberta ? "aberta" : ""}" data-id="${c.id}">
+      <div class="quemE">
+        <div class="nome">${escapar(c.nome) || "sem nome"}</div>
+        <div class="tel">${escapar(c.telefone)} · ${c.mensagens} mensagens</div>
+      </div>
+      ${et}
+      <div class="quando">${quando(c.ultimaMsgEm)}</div>
+    </button>`;
+  }).join("");
+
+  for (const b of el.querySelectorAll(".item")) {
+    b.addEventListener("click", () => abrirConversa(b.dataset.id));
+  }
+}
+
+async function abrirConversa(id) {
+  const c = await (await api("/api/conversas/" + id)).json();
+  conversaAberta = id;
+
+  $("detalhe").hidden = false;
+  $("detalheNome").textContent = c.nome || c.telefone;
+  $("detalheSub").textContent = [
+    c.telefone,
+    c.moto ? "moto: " + c.moto : "moto não identificada",
+    c.desfecho ? "desfecho: " + c.desfecho : null,
+    c.resumo,
+  ].filter(Boolean).join(" · ");
+
+  const et = $("detalheEtiqueta");
+  et.textContent = c.status === "encerrada" ? "encerrada" : c.iaAtiva ? "IA" : "balcão";
+  et.className = "etiqueta " + (c.status === "encerrada" ? "fim" : c.iaAtiva ? "ia" : "humano");
+
+  $("iaConversa").checked = c.iaAtiva;
+  pintarEstadoIa();
+
+  $("historicoConversa").innerHTML = c.mensagens.length === 0
+    ? '<span class="vazio">Sem mensagens.</span>'
+    : c.mensagens.map((m) => `<div class="balao ${m.papel}">
+        <div class="quem">${m.papel} · ${quando(m.criadoEm)}${m.tipoMidia === "imagem" ? " · foto" : ""}</div>
+        <div class="txt">${escapar(m.conteudo)}</div>
+      </div>`).join("");
+
+  carregarConversas();
+}
+
+function pintarEstadoIa() {
+  const ligada = $("iaConversa").checked;
+  $("estadoIa").textContent = ligada ? "IA respondendo esta conversa" : "Balcão assumiu — IA calada";
+  $("estadoIa").className = "estado " + (ligada ? "ligado" : "desligado");
+}
+
+async function alternarIa() {
+  if (!conversaAberta) return;
+  const ativa = $("iaConversa").checked;
+  pintarEstadoIa();
+  await api(`/api/conversas/${conversaAberta}/ia`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ativa }),
+  });
+  abrirConversa(conversaAberta);
+}
 
 function recado(el, texto, tipo = "") {
   el.textContent = texto;
@@ -203,7 +428,7 @@ function pintarEstadoBot() {
 }
 
 async function carregar() {
-  const r = await fetch("/api/config");
+  const r = await api("/api/config");
   const c = await r.json();
   $("botAtivo").checked = c.botAtivo;
   $("horario").value = c.horario;
@@ -214,7 +439,7 @@ async function carregar() {
   $("prompt").value = c.promptCustomizado ?? c.promptPadrao;
   pintarEstadoBot();
 
-  const m = await (await fetch("/api/metricas")).json();
+  const m = await (await api("/api/metricas")).json();
   $("metricas").innerHTML = [
     ["produtos", m.produtos], ["com compatibilidade", m.comFitment],
     ["motos", m.motos], ["demandas 30d", m.demandas],
@@ -234,7 +459,7 @@ async function salvar() {
       // continuar acompanhando as melhorias do sistema.
       promptCustomizado: $("prompt").value.trim() === padraoDoSistema.trim() ? null : $("prompt").value,
     };
-    const r = await fetch("/api/config", {
+    const r = await api("/api/config", {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo),
     });
     if (!r.ok) throw new Error(await r.text());
@@ -270,7 +495,7 @@ async function testar() {
   $("teste").value = "";
 
   try {
-    const r = await fetch("/api/testar", {
+    const r = await api("/api/testar", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         mensagem: msg,
@@ -302,7 +527,26 @@ $("restaurar").addEventListener("click", () => {
   recado($("recadoPrompt"), "Texto padrão recarregado — salve para valer.", "ok");
 });
 
-carregar();
+$("entrar").addEventListener("click", entrar);
+$("senha").addEventListener("keydown", (e) => { if (e.key === "Enter") entrar(); });
+$("sair").addEventListener("click", sair);
+$("atualizar").addEventListener("click", carregarConversas);
+$("buscaConversa").addEventListener("input", carregarConversas);
+$("iaConversa").addEventListener("change", alternarIa);
+
+for (const aba of document.querySelectorAll(".aba")) {
+  aba.addEventListener("click", () => {
+    for (const o of document.querySelectorAll(".aba")) o.classList.toggle("ativa", o === aba);
+    $("abaConversas").hidden = aba.dataset.aba !== "conversas";
+    $("abaConfig").hidden = aba.dataset.aba !== "config";
+  });
+}
+
+// Quem já tem cookie válido não vê a tela de login.
+fetch("/api/sessao")
+  .then((r) => r.json())
+  .then((s) => (s.entrou ? mostrarPainel() : mostrarLogin()))
+  .catch(mostrarLogin);
 </script>
 </body>
 </html>
