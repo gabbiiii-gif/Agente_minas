@@ -15,6 +15,7 @@
     "db:seed": "tsx --env-file-if-exists=.env src/db/semear.ts",
     "catalogo:fitment": "tsx --env-file-if-exists=.env src/catalogo/rodar-fitment.ts",
     "test:busca": "vitest run tests/busca/recall.test.ts",
+    "test:aceite": "vitest run --config vitest.aceite.config.ts",
     "start": "tsx --env-file-if-exists=.env src/gateway/servidor.ts",
     "dev": "tsx watch --env-file-if-exists=.env src/gateway/servidor.ts",
     "agente:conversar": "tsx --env-file-if-exists=.env src/agente/cli.ts",
