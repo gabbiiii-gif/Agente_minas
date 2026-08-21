@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import { descompactar, parsearPlanilha, validarCabecalho } from "./planilha.js";
 import { normalizar } from "./normalizar.js";
 import { expandir } from "./expandir.js";
-import { carregarSinonimos } from "../db/semear.js";
+import { carregarSinonimos } from "../db/sinonimos.js";
 
 /**
  * O que o import fez, para o CLI imprimir e o operador conferir.

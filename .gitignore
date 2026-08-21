@@ -9,3 +9,6 @@ dist/
 # temporarios do CLI do supabase
 supabase/.temp/
 deno.lock
+
+# copia gerada por npm run funcao:preparar
+supabase/functions/_shared/

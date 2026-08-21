@@ -2,7 +2,6 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Pool } from "pg";
-import type { Sinonimos } from "../catalogo/expandir.js";
 import { criarPool } from "./pool.js";
 import { lerEnv } from "../config/env.js";
 
@@ -25,19 +24,10 @@ export async function semear(
   }
 }
 
-/**
- * Carrega a tabela de sinônimos no formato que `expandir` consome.
- *
- * Usado pelo importador (para gravar a descrição normalizada) e pela busca
- * (para tratar a frase do cliente). Os dois lados precisam do MESMO mapa,
- * senão a consulta e o catálogo divergem e a busca não acha nada.
- */
-export async function carregarSinonimos(pool: Pool): Promise<Sinonimos> {
-  const { rows } = await pool.query<{ termo: string; canonico: string }>(
-    "select termo, canonico from agente.sinonimos",
-  );
-  return new Map(rows.map((r) => [r.termo, r.canonico]));
-}
+// Reexportado por compatibilidade: o lugar dele agora é `sinonimos.ts`, para
+// a busca não depender deste arquivo — que lê disco, abre pool e tem bloco de
+// CLI, coisas que a Edge Function não resolve.
+export { carregarSinonimos } from "./sinonimos.js";
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const pool = criarPool(lerEnv().databaseUrl);

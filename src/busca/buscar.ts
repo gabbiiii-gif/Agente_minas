@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import { normalizar } from "../catalogo/normalizar.js";
 import { expandir } from "../catalogo/expandir.js";
-import { carregarSinonimos } from "../db/semear.js";
+import { carregarSinonimos } from "../db/sinonimos.js";
 import type { Sinonimos } from "../catalogo/expandir.js";
 
 /** Uma peça encontrada. Note que não existe preço: o ERP não exporta valor. */

@@ -1,8 +1,11 @@
 // Gateway do WhatsApp como Supabase Edge Function.
 //
 // Mesmo miolo do processo Node: `atender`, `responderTurno`, ferramentas,
-// prompt e busca vêm todos de `src/`, sem cópia. Só duas coisas mudam aqui, e
-// as duas por causa de serverless:
+// prompt e busca vêm todos de `src/`. O que está em `_shared` é cópia gerada
+// por `npm run funcao:preparar` — existe só porque o Node exige extensão
+// `.js` nos imports e o bundler do Supabase espera `.ts`. Não edite lá.
+//
+// Só duas coisas mudam de verdade aqui, e as duas por causa de serverless:
 //
 //   1. O banco. `pg` é de Node; aqui entra um cliente Deno atrás de um
 //      adaptador com o mesmo `query(sql, params)`. Funciona porque nenhum
@@ -15,8 +18,8 @@
 // Supabase; a autenticação é o segredo abaixo.)
 import { Pool as PoolDeno } from "jsr:@db/postgres@0.19";
 import Anthropic from "npm:@anthropic-ai/sdk@0.120.0";
-import { criarAtendimento } from "../../../src/gateway/atender.ts";
-import { esperarVez } from "../../../src/gateway/janela.ts";
+import { criarAtendimento } from "../_shared/gateway/atender.ts";
+import { esperarVez } from "../_shared/gateway/janela.ts";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 
