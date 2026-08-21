@@ -22,6 +22,7 @@
     "painel": "tsx --env-file-if-exists=.env src/painel/servidor.ts",
     "relatorio:diario": "tsx --env-file-if-exists=.env src/relatorio/diario.ts",
     "whatsapp:parear": "tsx --env-file-if-exists=.env src/whatsapp/parear.ts",
+    "painel:preparar": "tsx src/infra/preparar-painel.ts",
     "funcao:preparar": "tsx src/infra/preparar-funcao.ts",
     "funcao:deploy": "npm run funcao:preparar && supabase functions deploy whatsapp-webhook --no-verify-jwt",
     "whatsapp:webhook": "tsx --env-file-if-exists=.env src/whatsapp/webhook.ts",
@@ -40,6 +41,7 @@
     "supabase": "^2.115.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "vercel": "^59.3.0",
     "vitest": "^2.1.8"
   }
 }

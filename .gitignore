@@ -12,3 +12,6 @@ deno.lock
 
 # copia gerada por npm run funcao:preparar
 supabase/functions/_shared/
+
+# gerado por npm run painel:preparar
+public/
