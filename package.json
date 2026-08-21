@@ -22,6 +22,7 @@
     "painel": "tsx --env-file-if-exists=.env src/painel/servidor.ts",
     "relatorio:diario": "tsx --env-file-if-exists=.env src/relatorio/diario.ts",
     "whatsapp:parear": "tsx --env-file-if-exists=.env src/whatsapp/parear.ts",
+    "whatsapp:webhook": "tsx --env-file-if-exists=.env src/whatsapp/webhook.ts",
     "whatsapp:estado": "tsx --env-file-if-exists=.env src/whatsapp/estado.ts"
   },
   "dependencies": {
