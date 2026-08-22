@@ -132,6 +132,15 @@
     width: 100%; padding: 9px 11px; font: inherit; color: var(--texto);
     background: var(--fundo); border: 1px solid var(--borda); border-radius: 7px;
   }
+  .campoSenha { position: relative; }
+  .campoSenha input { padding-right: 44px; }
+  .olho {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    border: none; background: none; padding: 6px 8px; cursor: pointer;
+    color: var(--suave); line-height: 0;
+  }
+  .olho:hover { color: var(--texto); }
+  .olho svg { width: 19px; height: 19px; }
 </style>
 </head>
 <body>
@@ -146,7 +155,17 @@
     <h2>Entrar</h2>
     <p class="dica">O painel mostra conversa de cliente. Só entra quem tem a senha.</p>
     <label for="senha">Senha</label>
-    <input type="password" id="senha" autocomplete="current-password">
+    <div class="campoSenha">
+      <input type="password" id="senha" autocomplete="current-password">
+      <button type="button" class="olho" id="verSenha" aria-label="Mostrar senha" title="Mostrar senha">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path id="olhoAberto" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle id="olhoPupila" cx="12" cy="12" r="3"/>
+          <line id="olhoCorte" x1="3" y1="3" x2="21" y2="21" style="display:none"/>
+        </svg>
+      </button>
+    </div>
     <div class="acoes">
       <button class="primario" id="entrar">Entrar</button>
       <span class="recado" id="recadoLogin"></span>
@@ -525,6 +544,19 @@ $("limparTeste").addEventListener("click", () => { historico = []; desenharConve
 $("restaurar").addEventListener("click", () => {
   $("prompt").value = padraoDoSistema;
   recado($("recadoPrompt"), "Texto padrão recarregado — salve para valer.", "ok");
+});
+
+// Senha de painel se digita errado com facilidade — ainda mais uma gerada,
+// cheia de zero que parece "o". O olhinho evita a terceira tentativa.
+$("verSenha").addEventListener("click", () => {
+  const campo = $("senha");
+  const vendo = campo.type === "text";
+  campo.type = vendo ? "password" : "text";
+  $("olhoCorte").style.display = vendo ? "none" : "";
+  const rotulo = vendo ? "Mostrar senha" : "Ocultar senha";
+  $("verSenha").setAttribute("aria-label", rotulo);
+  $("verSenha").title = rotulo;
+  campo.focus();
 });
 
 $("entrar").addEventListener("click", entrar);
