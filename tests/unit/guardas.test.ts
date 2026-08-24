@@ -15,6 +15,7 @@ const CFG: ConfigLoja = {
   maxMensagensConversa: 30,
   promptCustomizado: null,
   modeloConversa: "claude-sonnet-5",
+  telefoneDono: null,
 };
 
 const CONTATO: Contato = {

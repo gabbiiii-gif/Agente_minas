@@ -13,6 +13,7 @@ import {
 import { lerConfig, promptEfetivo } from "../config/loja.js";
 import { montarContexto } from "../agente/prompt.js";
 import { responder, type Fala, type Imagem } from "../agente/laco.js";
+import { anotarAviso } from "../conversa/avisos.js";
 import { executarFerramenta } from "../ferramentas/executar.js";
 import { enviar, type ConfigEvolution } from "../saida/evolution.js";
 import { avaliar } from "./guardas.js";
@@ -107,11 +108,17 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
 
   /** Avisa o dono por WhatsApp. Nunca lança: alerta que quebra é pior que alerta que falta. */
   async function avisarDono(texto: string): Promise<void> {
-    if (!deps.telefoneDono) return;
+    // A config ganha do ambiente: é o número que o dono escolheu no painel, e
+    // trocar de aparelho não pode exigir deploy.
+    const cfg = await lerConfig(deps.pool).catch(() => null);
+    const numero = cfg?.telefoneDono ?? deps.telefoneDono;
+    if (!numero) return;
     try {
-      await enviar(deps.pool, deps.evolution, deps.telefoneDono, texto);
+      await enviar(deps.pool, deps.evolution, numero, texto);
+      await anotarAviso(deps.pool, "alerta", texto, numero);
     } catch (erro) {
       console.error("não consegui avisar o dono:", erro);
+      await anotarAviso(deps.pool, "alerta", texto, numero, (erro as Error).message);
     }
   }
 

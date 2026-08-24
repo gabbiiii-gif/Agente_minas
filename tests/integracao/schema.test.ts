@@ -27,7 +27,7 @@ descrever("schema agente", () => {
       "produtos", "motos", "produto_moto", "sinonimos",
       "contatos", "conversas", "mensagens", "demanda_nao_atendida",
       "config", "saidas_pendentes",
-      "servicos", "agente_versoes", "painel_log",
+      "servicos", "agente_versoes", "painel_log", "avisos_dono",
     ]) {
       expect(nomes).toContain(esperada);
     }

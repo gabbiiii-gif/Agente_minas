@@ -9,6 +9,8 @@ import { pathToFileURL } from "node:url";
 import { criarPool } from "../db/pool.js";
 import { lerEnvGateway } from "../config/env.js";
 import { enviar, type ConfigEvolution } from "../saida/evolution.js";
+import { anotarAviso } from "../conversa/avisos.js";
+import { lerConfig } from "../config/loja.js";
 
 export interface LinhaDemanda {
   /** Peça em nome padronizado. null quando o agente não conseguiu normalizar. */
@@ -91,12 +93,28 @@ export async function enviarRelatorio(
     return false;
   }
 
-  if (!telefoneDono) {
-    console.log("TELEFONE_DONO não configurado; relatório não enviado:\n" + texto);
+  // O número escolhido no painel ganha do ambiente: o cron roda no host e
+  // ninguém vai lembrar de editar variável de serviço quando o dono trocar de
+  // aparelho. Falha na leitura cai de volta para o ambiente, para o relatório
+  // não deixar de sair por causa do banco.
+  const numero = (await lerConfig(pool, false).catch(() => null))?.telefoneDono ?? telefoneDono;
+
+  if (!numero) {
+    console.log("nenhum telefone do dono configurado; relatório não enviado:\n" + texto);
+    await anotarAviso(pool, "relatorio", texto, null, "sem telefone configurado");
     return false;
   }
 
-  await enviar(pool, evolution, telefoneDono, texto);
+  try {
+    await enviar(pool, evolution, numero, texto);
+  } catch (erro) {
+    // Registra e relança: o cron precisa sair com erro para a falha aparecer
+    // no log do host, e o painel precisa ter a linha para o dono ver.
+    await anotarAviso(pool, "relatorio", texto, numero, (erro as Error).message);
+    throw erro;
+  }
+
+  await anotarAviso(pool, "relatorio", texto, numero);
   return true;
 }
 

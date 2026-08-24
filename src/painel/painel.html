@@ -619,6 +619,7 @@ tr.inativo td { opacity: .5; }
       <button class="aba" role="tab" data-aba="servicos"  aria-selected="false">Serviços</button>
       <button class="aba" role="tab" data-aba="agente"    aria-selected="false">Agente</button>
       <button class="aba" role="tab" data-aba="whatsapp"  aria-selected="false">WhatsApp</button>
+      <button class="aba" role="tab" data-aba="dono"      aria-selected="false">Dono</button>
       <button class="aba" role="tab" data-aba="ajustes"   aria-selected="false">Ajustes</button>
       <span class="marcador" id="marcador" aria-hidden="true"></span>
     </nav>
@@ -914,6 +915,84 @@ tr.inativo td { opacity: .5; }
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ----------------------------------------------------------- dono -->
+    <section id="secDono" role="tabpanel" hidden>
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Para onde vai</span>
+            <h2>Telefone do dono</h2>
+            <p class="dica">Este número recebe o relatório diário e o aviso quando o atendimento falha. Nenhum cliente vê o que sai por aqui.</p>
+          </div>
+        </div>
+        <div class="face-corpo">
+          <div class="linha">
+            <div style="flex:2 1 260px">
+              <label for="telDono"><span class="rotulo">Número com DDD</span></label>
+              <input type="text" id="telDono" placeholder="93 99110-6818">
+            </div>
+            <div style="flex:0 0 auto;align-self:end">
+              <button class="chave-acao" id="salvarTelDono">Salvar número</button>
+            </div>
+            <div style="flex:0 0 auto;align-self:end">
+              <button id="testarTelDono">Mandar teste</button>
+            </div>
+          </div>
+          <p class="dica" id="dicaTelDono"></p>
+        </div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Relatório diário</span>
+            <h2>Como ele vai chegar</h2>
+            <p class="dica">Montado pela mesma função que o cron das 7h usa — o que está aqui é exatamente o que o WhatsApp entrega.</p>
+          </div>
+          <select id="horasPrevia" style="width:auto">
+            <option value="24" selected>últimas 24h</option>
+            <option value="72">últimas 72h</option>
+            <option value="168">últimos 7 dias</option>
+          </select>
+        </div>
+        <div class="face-corpo">
+          <div class="transcricao" id="previaDono"><span class="vazio">carregando…</span></div>
+          <div class="acoes">
+            <button class="chave-acao" id="enviarPrevia">Enviar este relatório agora</button>
+            <span class="recado" id="recadoPrevia"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Escrever</span>
+            <h2>Mandar um recado para o dono</h2>
+            <p class="dica">Sai pelo mesmo WhatsApp da loja, direto para o número acima.</p>
+          </div>
+        </div>
+        <div class="face-corpo">
+          <textarea id="recadoDono" rows="3" placeholder="acabou o retentor da fan 160, pedir na próxima compra"></textarea>
+          <div class="acoes">
+            <button class="chave-acao" id="enviarRecadoDono">Enviar</button>
+            <span class="recado" id="recadoEnvioDono"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Histórico</span>
+            <h2>O que já saiu para o dono</h2>
+            <p class="dica">Inclui o que falhou. "Não chegou relatório ontem" deixa de ser palpite.</p>
+          </div>
+        </div>
+        <div class="face-corpo"><div id="historicoDono"><span class="vazio">carregando…</span></div></div>
       </div>
     </section>
 
@@ -1222,7 +1301,7 @@ async function sair() {
 const SECOES = {
   visao: "secVisao", conversas: "secConversas", catalogo: "secCatalogo",
   servicos: "secServicos", agente: "secAgente", whatsapp: "secWhatsapp",
-  ajustes: "secAjustes",
+  dono: "secDono", ajustes: "secAjustes",
 };
 
 const CARREGADORES = {
@@ -1232,6 +1311,7 @@ const CARREGADORES = {
   servicos: carregarServicos,
   agente: carregarAgente,
   whatsapp: conferirZap,
+  dono: carregarDono,
   ajustes: carregarAjustes,
 };
 
@@ -1439,6 +1519,11 @@ const NOME_ACAO = {
   religar_ia: "devolveu a conversa à IA",
   responder_manual: "respondeu um cliente pelo painel",
   restaurar_versao: "restaurou uma versão do agente",
+  religar_ia_lote: "devolveu várias conversas à IA",
+  assumir_conversa_lote: "assumiu várias conversas",
+  trocar_telefone_dono: "trocou o telefone do dono",
+  tirar_telefone_dono: "tirou o telefone do dono",
+  enviar_ao_dono: "mandou uma mensagem para o dono",
 };
 
 async function carregarLog() {
@@ -2225,6 +2310,101 @@ $("desconectarZap").addEventListener("click", async () => {
     atualizarLuzes();
   } catch (e) { torrada(e.message, "erro"); }
 });
+
+/* ===================================================================
+   Dono
+   =================================================================== */
+const NOME_TIPO_AVISO = {
+  relatorio: "relatório diário",
+  alerta: "alerta de falha",
+  manual: "recado do painel",
+  teste: "teste de número",
+};
+
+/** Formata o número do jeito que se lê num celular brasileiro. */
+function telefoneLegivel(numero) {
+  if (!numero) return null;
+  const m = String(numero).match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : numero;
+}
+
+async function carregarDono() {
+  const horas = $("horasPrevia").value;
+  const d = await pegar("/api/dono?horas=" + horas);
+
+  $("telDono").value = telefoneLegivel(d.telefone) ?? "";
+  $("dicaTelDono").textContent = d.telefone
+    ? `Salvo como ${d.telefone}. É esse número que recebe tudo.`
+    : d.telefoneDoAmbiente
+      ? `Nenhum número salvo no painel — está valendo o do ambiente (${d.telefoneDoAmbiente}). Salvar aqui passa a mandar nele.`
+      : "Nenhum número configurado. Enquanto ficar assim, relatório e alerta não vão para ninguém.";
+
+  $("previaDono").innerHTML = d.previa
+    ? `<div class="balao agente"><div class="quem">como vai chegar no WhatsApp</div><div class="txt">${escapar(d.previa)}</div></div>`
+    : `<span class="vazio">Nada em falta nesse período — o relatório não seria enviado. Mensagem vazia todo dia treina o dono a ignorar a próxima.</span>`;
+
+  // Sem conteúdo não há o que enviar, e sem Evolution o envio não sai daqui.
+  $("enviarPrevia").disabled = !d.previa || !d.podeEnviar;
+  $("enviarRecadoDono").disabled = !d.podeEnviar;
+  $("testarTelDono").disabled = !d.podeEnviar;
+  if (!d.podeEnviar) {
+    recado($("recadoPrevia"), "Evolution não configurado neste ambiente — dá para ver, não dá para enviar.");
+  }
+
+  $("historicoDono").innerHTML = d.historico.length === 0
+    ? '<span class="vazio">Nada saiu para o dono ainda.</span>'
+    : d.historico.map((a) => `<div class="item" style="cursor:default;align-items:flex-start">
+        <span class="quemE">
+          <span class="nome">${escapar(NOME_TIPO_AVISO[a.tipo] ?? a.tipo)}${a.telefone ? " · " + escapar(a.telefone) : ""}</span>
+          <span class="tel" style="font-family:Barlow,sans-serif;white-space:normal">${escapar(a.texto).slice(0, 220)}</span>
+          ${a.erro ? `<span class="tel" style="color:var(--vermelho)">${escapar(a.erro)}</span>` : ""}
+        </span>
+        <span class="etiqueta ${a.enviado ? "ia" : "humano"}">${a.enviado ? "entregue" : "falhou"}</span>
+        <span class="quando">${quandoLongo(a.criadoEm)}</span>
+      </div>`).join("");
+}
+
+async function salvarTelefoneDono() {
+  $("salvarTelDono").disabled = true;
+  try {
+    const r = await mandar("/api/dono/telefone", "PUT", { telefone: $("telDono").value });
+    torrada(r.telefone ? `Número salvo: ${r.telefone}` : "Número removido. Ninguém será avisado.", "ok");
+    await carregarDono();
+  } catch (e) {
+    torrada(e.message, "erro");
+  } finally {
+    $("salvarTelDono").disabled = false;
+  }
+}
+
+/** Um envio qualquer para o dono, com o botão travado enquanto sai. */
+async function mandarAoDono(botao, corpo, recadoOk) {
+  const el = $(botao);
+  el.disabled = true;
+  try {
+    await mandar("/api/dono/enviar", "POST", corpo);
+    torrada(recadoOk, "ok");
+    await carregarDono();
+  } catch (e) {
+    torrada(e.message, "erro");
+  } finally {
+    el.disabled = false;
+  }
+}
+
+$("salvarTelDono").addEventListener("click", salvarTelefoneDono);
+$("telDono").addEventListener("keydown", (e) => { if (e.key === "Enter") salvarTelefoneDono(); });
+$("testarTelDono").addEventListener("click", () =>
+  mandarAoDono("testarTelDono", { tipo: "teste" }, "Teste enviado. Confira o celular."));
+$("enviarPrevia").addEventListener("click", () =>
+  mandarAoDono("enviarPrevia", { tipo: "relatorio", horas: Number($("horasPrevia").value) }, "Relatório enviado."));
+$("enviarRecadoDono").addEventListener("click", async () => {
+  const texto = $("recadoDono").value.trim();
+  if (texto === "") return;
+  await mandarAoDono("enviarRecadoDono", { tipo: "manual", texto }, "Recado enviado.");
+  $("recadoDono").value = "";
+});
+$("horasPrevia").addEventListener("change", () => carregarDono().catch((e) => torrada(e.message, "erro")));
 
 /* ===================================================================
    Ajustes

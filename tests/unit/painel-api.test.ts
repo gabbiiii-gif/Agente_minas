@@ -75,6 +75,7 @@ describe("painel na vercel — sessão", () => {
       "/api/servicos",
       "/api/versoes",
       "/api/whatsapp",
+      "/api/dono",
     ];
     for (const rota of protegidas) {
       expect((await chamar(rota)).codigo, rota).toBe(401);
@@ -90,6 +91,9 @@ describe("painel na vercel — sessão", () => {
       ["/api/whatsapp/desconectar", "POST"],
       ["/api/conversas/abc/responder", "POST"],
       ["/api/prever", "POST"],
+      ["/api/dono/enviar", "POST"],
+      ["/api/dono/telefone", "PUT"],
+      ["/api/conversas/lote/ia", "POST"],
       ["/api/testar", "POST"],
     ];
     for (const [rota, metodo] of escritas) {

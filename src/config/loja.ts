@@ -20,6 +20,15 @@ export interface ConfigLoja {
   promptCustomizado: string | null;
   /** Modelo da API que responde ao cliente. Trocável pelo painel. */
   modeloConversa: string;
+  /**
+   * Para onde vão relatório e alerta. null = ninguém é avisado.
+   *
+   * Estava só em `TELEFONE_DONO`, o que obrigava a mexer no ambiente e
+   * reimplantar para trocar de número — coisa que acontece quando o dono
+   * troca de aparelho ou sai de férias. Aqui vale a partir do minuto
+   * seguinte; a variável de ambiente segue valendo como padrão.
+   */
+  telefoneDono: string | null;
 }
 
 const PADRAO: ConfigLoja = {
@@ -30,6 +39,7 @@ const PADRAO: ConfigLoja = {
   maxMensagensConversa: 30,
   promptCustomizado: null,
   modeloConversa: MODELO_CONVERSA,
+  telefoneDono: null,
 };
 
 /**
@@ -75,6 +85,7 @@ const CHAVES: Record<keyof ConfigLoja, string> = {
   maxMensagensConversa: "max_mensagens_conversa",
   promptCustomizado: "prompt_sistema",
   modeloConversa: "modelo_conversa",
+  telefoneDono: "telefone_dono",
 };
 
 export async function lerConfig(pool: Pool, usarCache = true): Promise<ConfigLoja> {
@@ -100,6 +111,10 @@ export async function lerConfig(pool: Pool, usarCache = true): Promise<ConfigLoj
     maxMensagensConversa: pegar(CHAVES.maxMensagensConversa, PADRAO.maxMensagensConversa),
     promptCustomizado: pegar<string | null>(CHAVES.promptCustomizado, null),
     modeloConversa: pegar(CHAVES.modeloConversa, PADRAO.modeloConversa),
+    // O ambiente é o padrão de fábrica: vale enquanto ninguém tiver
+    // escolhido um número no painel.
+    telefoneDono:
+      pegar<string | null>(CHAVES.telefoneDono, null) ?? (process.env.TELEFONE_DONO?.trim() || null),
   };
 
   cache = { valor, em: Date.now() };

@@ -45,6 +45,7 @@ import {
   prever,
 } from "./catalogo.js";
 import { listarVersoes, restaurarVersao, compararVersao, listarLog } from "./versoes.js";
+import { verDono, trocarTelefone, enviarAoDono } from "./dono.js";
 import { situacao, pedirQr, desconectar, reiniciar } from "./whatsapp.js";
 
 // ESM não tem __dirname; o HTML mora ao lado deste arquivo.
@@ -248,6 +249,22 @@ export async function criarPainel(pool: Pool, anthropic: Anthropic) {
     const { numero } = (req.body ?? {}) as { numero?: number };
     return ou(resp, await restaurarVersao(pool, Number(numero)), 400);
   });
+
+  // ------------------------------------------------------------------- dono
+
+  app.get("/api/dono", async (req) => {
+    const { horas } = req.query as { horas?: string };
+    return verDono(pool, Number(horas) || 24);
+  });
+
+  app.put("/api/dono/telefone", async (req, resp) => {
+    const { telefone } = (req.body ?? {}) as { telefone?: string };
+    return ou(resp, await trocarTelefone(pool, String(telefone ?? "")), 400);
+  });
+
+  app.post("/api/dono/enviar", async (req, resp) =>
+    ou(resp, await enviarAoDono(pool, req.body as any), 400),
+  );
 
   // --------------------------------------------------------------- whatsapp
 

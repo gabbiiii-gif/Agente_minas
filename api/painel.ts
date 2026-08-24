@@ -49,6 +49,7 @@ import {
   listarLog,
 } from "../src/painel/versoes.js";
 import { situacao, pedirQr, desconectar, reiniciar } from "../src/painel/whatsapp.js";
+import { verDono, trocarTelefone, enviarAoDono } from "../src/painel/dono.js";
 import { senhaConfere, criarCookie, cookieDeSaida, sessaoValida } from "../src/painel/auth.js";
 import type { ConfigLoja } from "../src/config/loja.js";
 
@@ -304,6 +305,20 @@ export default async function handler(req: Req, resp: Resp): Promise<void> {
         return;
       }
       resp.status(200).json(await listarVersoes(pool));
+      return;
+    }
+
+    if (raiz === "dono") {
+      const acao = rota[1];
+      if (acao === "telefone" && metodo === "PUT") {
+        ou(await trocarTelefone(pool, String(corpo.telefone ?? "")), 400);
+        return;
+      }
+      if (acao === "enviar" && metodo === "POST") {
+        ou(await enviarAoDono(pool, corpo), 400);
+        return;
+      }
+      resp.status(200).json(await verDono(pool, Number(primeiro(req.query.horas)) || 24));
       return;
     }
 
