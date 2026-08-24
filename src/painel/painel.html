@@ -437,6 +437,31 @@ tr.inativo td { opacity: .5; }
 
 .paginacao { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 
+/* Linha de conversa: caixa de seleção, área clicável e ação, tudo na mesma
+   linha. Ela precisa ser um div — botão dentro de botão não é HTML válido, e
+   o clique do de dentro nunca chegaria a disparar. */
+.item .abrir {
+  flex: 1 1 auto; min-width: 0; text-align: left; padding: 0;
+  background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
+}
+.item .abrir:hover .nome { color: var(--ambar); }
+.item.selecionavel { cursor: default; }
+.marca {
+  width: 16px; height: 16px; flex: none; margin: 0;
+  accent-color: var(--ambar); cursor: pointer;
+}
+
+/* A barra de lote só existe quando há alguma coisa marcada: um comando que
+   age sobre dezenas de conversas não pode ficar à mão o tempo todo. */
+.lote {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; margin-top: 12px;
+  border: 1px solid var(--ambar); border-radius: var(--raio);
+  background: color-mix(in srgb, var(--ambar) 8%, transparent);
+}
+.lote .quantas { font-weight: 600; }
+.marcarTodas { display: flex; align-items: center; gap: 9px; margin-top: 14px; cursor: pointer; }
+
 /* --------------------------------------------------------------- a gaveta */
 .gaveta {
   position: fixed; inset: 0; z-index: 60; display: flex; justify-content: flex-end;
@@ -679,6 +704,19 @@ tr.inativo td { opacity: .5; }
             <button class="mini filtro" data-filtro="ia" aria-pressed="false">Com a IA</button>
             <button class="mini filtro" data-filtro="encerrada" aria-pressed="false">Encerradas</button>
           </div>
+          <label class="marcarTodas">
+            <input type="checkbox" class="marca" id="marcarTodas">
+            <span class="rotulo">Marcar todas as desta lista</span>
+          </label>
+
+          <div class="lote" id="barraLote" hidden>
+            <span class="quantas" id="quantasMarcadas"></span>
+            <button class="mini chave-acao" id="loteDevolver">Devolver à IA</button>
+            <button class="mini" id="lotePassar">Passar ao balcão</button>
+            <span style="flex:1"></span>
+            <button class="mini plano" id="loteLimpar">Desmarcar</button>
+          </div>
+
           <div class="lista" id="listaConversas"><span class="vazio">carregando…</span></div>
         </div>
       </div>
@@ -1082,6 +1120,8 @@ let historicoTeste = [];
 let conversaAberta = null;
 let conversasEmTela = [];
 let filtroConversa = "todas";
+/** Ids marcados para o comando em lote. Sobrevive ao redesenho da lista. */
+let marcadas = new Set();
 let filtroProduto = "todos";
 let paginaProduto = 1;
 let paginaAtual = "visao";
@@ -1423,17 +1463,29 @@ async function carregarConversas() {
   desenharConversas();
 }
 
-function desenharConversas() {
-  const lista = conversasEmTela.filter((c) => {
+/** As conversas que passam pelo filtro escolhido. */
+function conversasFiltradas() {
+  return conversasEmTela.filter((c) => {
     if (filtroConversa === "balcao") return c.status === "aguardando_humano";
     if (filtroConversa === "ia") return c.status === "ativa" && c.iaAtiva;
     if (filtroConversa === "encerrada") return c.status === "encerrada";
     return true;
   });
+}
+
+function desenharConversas() {
+  const lista = conversasFiltradas();
+
+  // A lista se redesenha sozinha a cada 20 segundos. Sem podar aqui, o balcão
+  // marcaria cinco conversas, trocaria de filtro e mandaria o comando para
+  // outras que nem estão na tela.
+  const visiveis = new Set(lista.map((c) => c.id));
+  for (const id of marcadas) if (!visiveis.has(id)) marcadas.delete(id);
 
   const el = $("listaConversas");
   if (lista.length === 0) {
     el.innerHTML = '<span class="vazio">Nenhuma conversa aqui. A primeira aparece assim que um cliente escrever.</span>';
+    pintarLote();
     return;
   }
 
@@ -1442,18 +1494,94 @@ function desenharConversas() {
       ? '<span class="etiqueta fim">encerrada</span>'
       : c.iaAtiva ? '<span class="etiqueta ia">IA</span>'
                   : '<span class="etiqueta humano">balcão</span>';
-    return `<button class="item" data-id="${c.id}" aria-current="${c.id === conversaAberta}">
-      <span class="quemE">
+    // O rótulo do botão diz o que vai acontecer, não em que estado se está:
+    // "assumir" é o que o balcão pensa que está fazendo.
+    const acao = c.iaAtiva
+      ? '<button class="mini plano" data-ia="desligar">Assumir</button>'
+      : '<button class="mini plano" data-ia="ligar">Devolver à IA</button>';
+    return `<div class="item selecionavel" data-id="${c.id}" aria-current="${c.id === conversaAberta}">
+      <input type="checkbox" class="marca" ${marcadas.has(c.id) ? "checked" : ""}
+             aria-label="Marcar conversa de ${escapar(c.nome) || escapar(c.telefone)}">
+      <button class="abrir">
         <span class="nome">${escapar(c.nome) || "sem nome"}</span>
         <span class="tel">${escapar(c.telefone)} · ${c.mensagens} mensagens</span>
-      </span>
+      </button>
       ${et}
       <span class="quando">${quando(c.ultimaMsgEm)}</span>
-    </button>`;
+      ${acao}
+    </div>`;
   }).join("");
 
-  for (const b of $$(".item", el)) {
-    b.addEventListener("click", () => abrirConversa(b.dataset.id).catch((e) => torrada(e.message, "erro")));
+  for (const linha of $$(".item", el)) {
+    const id = linha.dataset.id;
+    linha.querySelector(".abrir").addEventListener("click", () =>
+      abrirConversa(id).catch((e) => torrada(e.message, "erro")));
+
+    linha.querySelector(".marca").addEventListener("change", (e) => {
+      if (e.target.checked) marcadas.add(id); else marcadas.delete(id);
+      pintarLote();
+    });
+
+    linha.querySelector("[data-ia]").addEventListener("click", (e) =>
+      alternarIaDaLinha(id, e.currentTarget.dataset.ia === "ligar"));
+  }
+
+  pintarLote();
+}
+
+/** Mostra a barra de lote só quando há o que fazer com ela. */
+function pintarLote() {
+  const total = conversasFiltradas().length;
+  $("barraLote").hidden = marcadas.size === 0;
+  $("quantasMarcadas").textContent =
+    marcadas.size === 1 ? "1 conversa marcada" : `${marcadas.size} conversas marcadas`;
+  const todas = $("marcarTodas");
+  todas.checked = total > 0 && marcadas.size === total;
+  // Estado intermediário: marcar algumas e ver a caixa do topo vazia dá a
+  // impressão de que a seleção se perdeu.
+  todas.indeterminate = marcadas.size > 0 && marcadas.size < total;
+}
+
+/** O botão da própria linha: um clique, sem abrir a conversa. */
+async function alternarIaDaLinha(id, ativa) {
+  try {
+    await mandar(`/api/conversas/${id}/ia`, "POST", { ativa });
+    torrada(ativa ? "Devolvida à IA." : "Conversa é sua. IA calada por 6 horas.", "ok");
+    await carregarConversas();
+    if (conversaAberta === id) await abrirConversa(id);
+    atualizarLuzes();
+  } catch (e) {
+    torrada(e.message, "erro");
+  }
+}
+
+/**
+ * O mesmo comando, para tudo que está marcado.
+ *
+ * Confirma antes de calar: religar por engano custa uma conversa estranha,
+ * calar por engano deixa cliente sem resposta até alguém perceber.
+ */
+async function alternarIaEmLote(ativa) {
+  const ids = [...marcadas];
+  if (ids.length === 0) return;
+  if (!ativa && !confirm(`Passar ${ids.length} conversa(s) ao balcão? A IA fica calada nelas por 6 horas.`)) return;
+
+  const botoes = [$("loteDevolver"), $("lotePassar")];
+  botoes.forEach((b) => (b.disabled = true));
+  try {
+    const r = await mandar("/api/conversas/lote/ia", "POST", { ids, ativa });
+    torrada(
+      ativa ? `${r.alteradas} devolvida(s) à IA.` : `${r.alteradas} agora é do balcão.`,
+      "ok",
+    );
+    marcadas.clear();
+    await carregarConversas();
+    if (conversaAberta) await abrirConversa(conversaAberta);
+    atualizarLuzes();
+  } catch (e) {
+    torrada(e.message, "erro");
+  } finally {
+    botoes.forEach((b) => (b.disabled = false));
   }
 }
 
@@ -2145,6 +2273,9 @@ for (const luz of $$(".luz")) luz.addEventListener("click", () => irPara(luz.dat
 for (const b of $$(".filtro")) {
   b.addEventListener("click", () => {
     filtroConversa = b.dataset.filtro;
+    // A seleção morre ao trocar de filtro: manter o que sumiu da tela é a
+    // receita para o comando pegar conversa que ninguém está vendo.
+    marcadas.clear();
     for (const o of $$(".filtro")) o.setAttribute("aria-pressed", String(o === b));
     desenharConversas();
   });
@@ -2161,6 +2292,14 @@ for (const b of $$(".filtroProd")) {
 
 let atrasoBusca;
 const buscarDepois = (fn) => () => { clearTimeout(atrasoBusca); atrasoBusca = setTimeout(fn, 280); };
+
+$("marcarTodas").addEventListener("change", (e) => {
+  marcadas = e.target.checked ? new Set(conversasFiltradas().map((c) => c.id)) : new Set();
+  desenharConversas();
+});
+$("loteDevolver").addEventListener("click", () => alternarIaEmLote(true));
+$("lotePassar").addEventListener("click", () => alternarIaEmLote(false));
+$("loteLimpar").addEventListener("click", () => { marcadas.clear(); desenharConversas(); });
 
 $("buscaConversa").addEventListener("input", buscarDepois(() => carregarConversas()));
 $("atualizarConversas").addEventListener("click", () => carregarConversas());

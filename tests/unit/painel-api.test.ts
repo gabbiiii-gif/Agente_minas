@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import handler from "../../api/[...rota].js";
+import handler from "../../api/painel.js";
 
 const SENHA = "senha-de-teste-do-painel";
 

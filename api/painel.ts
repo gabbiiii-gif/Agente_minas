@@ -7,6 +7,14 @@
 // Uma função e não uma por rota porque serverless cobra por invocação fria:
 // vinte arquivos seriam vinte bundles e vinte partidas a frio para uma tela
 // que carrega tudo de uma vez.
+//
+// O arquivo se chamava `[...rota].ts`, apostando no roteamento automático da
+// Vercel para caminhos aninhados. Não funcionava: com `outputDirectory`
+// apontando para uma pasta estática, só `/api/algo` chegava aqui —
+// `/api/conversas/<id>` batia no 404 estático e a tela recebia a página de
+// erro em HTML onde esperava JSON ("Unexpected token 'T'"). Agora quem manda
+// tudo para cá é o rewrite declarado no `vercel.json`, e o nome do arquivo
+// deixou de importar.
 import {
   obterPool,
   obterAnthropic,
@@ -15,6 +23,7 @@ import {
   acaoListarConversas,
   acaoLerConversa,
   acaoAlternarIa,
+  acaoAlternarIaEmLote,
   acaoResponderManual,
   acaoMetricas,
   acaoDemandas,
@@ -64,10 +73,26 @@ const LIVRES = new Set(["entrar", "sair", "sessao"]);
 const primeiro = (v: string | string[] | undefined): string =>
   Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
 
-export default async function handler(req: Req, resp: Resp): Promise<void> {
+/**
+ * Os segmentos do caminho pedido, sem o "api".
+ *
+ * O rewrite da Vercel é interno e a função continua vendo a URL original, mas
+ * a leitura não depende disso: se um dia o caminho chegar já reescrito, o
+ * `rota` da query cobre. Uma rota que some é a tela inteira quebrando, e o
+ * custo de olhar dois lugares é uma comparação.
+ */
+function segmentos(req: Req): string[] {
+  const daQuery = req.query?.rota;
+  if (Array.isArray(daQuery) && daQuery.length > 0) return daQuery;
+  if (typeof daQuery === "string" && daQuery !== "") return daQuery.split("/").filter(Boolean);
+
   const partes = (req.url ?? "").split("?")[0]!.split("/").filter(Boolean);
   // ["api", "conversas", "<id>", "ia"] → tira o "api"
-  const rota = partes[0] === "api" ? partes.slice(1) : partes;
+  return partes[0] === "api" ? partes.slice(1) : partes;
+}
+
+export default async function handler(req: Req, resp: Resp): Promise<void> {
+  const rota = segmentos(req);
   const raiz = rota[0] ?? "";
   const metodo = (req.method ?? "GET").toUpperCase();
   const cookie = primeiro(req.headers.cookie);
@@ -166,6 +191,12 @@ export default async function handler(req: Req, resp: Resp): Promise<void> {
 
       if (id === undefined) {
         resp.status(200).json(await acaoListarConversas(pool, primeiro(req.query.busca)));
+        return;
+      }
+
+      // "lote" ocupa o lugar do id no caminho; nenhum uuid se parece com ele.
+      if (id === "lote" && rota[2] === "ia" && metodo === "POST") {
+        ou(await acaoAlternarIaEmLote(pool, corpo.ids, corpo.ativa === true), 400);
         return;
       }
 

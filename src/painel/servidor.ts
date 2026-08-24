@@ -25,6 +25,7 @@ import {
   acaoListarConversas,
   acaoLerConversa,
   acaoAlternarIa,
+  acaoAlternarIaEmLote,
   acaoResponderManual,
   acaoMetricas,
   acaoDemandas,
@@ -126,6 +127,13 @@ export async function criarPainel(pool: Pool, anthropic: Anthropic) {
   app.get("/api/conversas/:id", async (req, resp) =>
     ou(resp, await acaoLerConversa(pool, (req.params as { id: string }).id), 404),
   );
+
+  // Antes de ":id": um caminho literal precisa ser declarado com o parâmetro
+  // em mente, e "lote" nunca é um uuid, então nunca há ambiguidade real.
+  app.post("/api/conversas/lote/ia", async (req, resp) => {
+    const { ids, ativa } = (req.body ?? {}) as { ids?: string[]; ativa?: boolean };
+    return ou(resp, await acaoAlternarIaEmLote(pool, ids, ativa === true), 400);
+  });
 
   app.post("/api/conversas/:id/ia", async (req, resp) => {
     const { ativa } = (req.body ?? {}) as { ativa?: boolean };

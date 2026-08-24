@@ -246,6 +246,71 @@ export async function acaoAlternarIa(
   return { ok: true };
 }
 
+/** Formato de uuid. Filtra antes do banco: um id torto abortaria o lote todo. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Teto por chamada. Acima disso é engano de clique, não intenção. */
+const MAX_LOTE = 200;
+
+/**
+ * Liga ou desliga a IA em várias conversas de uma vez.
+ *
+ * Na segunda-feira de manhã o balcão chega com a fila da madrugada inteira
+ * marcada como "aguardando humano" — devolver uma por uma é o tipo de
+ * trabalho que faz o painel deixar de ser usado. E quando o atendimento sai
+ * do rumo, o dono precisa calar o agente em tudo que está aberto agora, não
+ * daqui a quarenta cliques.
+ *
+ * Faz o mesmo que `acaoAlternarIa`, em duas instruções de conjunto em vez de
+ * duas por conversa: com cem conversas selecionadas, a diferença entre isto
+ * e um laço é duzentas idas ao Supabase.
+ */
+export async function acaoAlternarIaEmLote(
+  pool: Pool,
+  ids: unknown,
+  iaAtiva: boolean,
+): Promise<{ ok: true; alteradas: number } | { erro: string }> {
+  const limpos = [
+    ...new Set(
+      (Array.isArray(ids) ? ids : []).filter((i): i is string => typeof i === "string" && UUID.test(i)),
+    ),
+  ];
+
+  if (limpos.length === 0) return { erro: "nenhuma conversa selecionada" };
+  if (limpos.length > MAX_LOTE) {
+    return { erro: `no máximo ${MAX_LOTE} conversas por vez — foram ${limpos.length}` };
+  }
+
+  // O silêncio do contato e o status da conversa andam juntos: quem só
+  // mudasse o status veria a conversa "ativa" e o agente continuaria calado
+  // pelas seis horas do silenciamento.
+  const contatos = `select contato_id from agente.conversas where id = any($1::uuid[])`;
+
+  if (iaAtiva) {
+    const r = await pool.query(
+      "update agente.conversas set status = 'ativa' where id = any($1::uuid[])",
+      [limpos],
+    );
+    await pool.query(
+      `update agente.contatos set silenciado_ate = null where id in (${contatos})`,
+      [limpos],
+    );
+    await registrar(pool, "religar_ia_lote", { quantas: r.rowCount ?? 0 });
+    return { ok: true, alteradas: r.rowCount ?? 0 };
+  }
+
+  const r = await pool.query(
+    "update agente.conversas set status = 'aguardando_humano' where id = any($1::uuid[])",
+    [limpos],
+  );
+  await pool.query(
+    `update agente.contatos set silenciado_ate = now() + interval '6 hours' where id in (${contatos})`,
+    [limpos],
+  );
+  await registrar(pool, "assumir_conversa_lote", { quantas: r.rowCount ?? 0 });
+  return { ok: true, alteradas: r.rowCount ?? 0 };
+}
+
 /**
  * Responde ao cliente pelo painel, como balcão.
  *
