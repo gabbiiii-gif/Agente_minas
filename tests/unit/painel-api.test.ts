@@ -61,8 +61,39 @@ describe("painel na vercel — sessão", () => {
   });
 
   it("recusa rota protegida sem cookie", async () => {
-    for (const rota of ["/api/config", "/api/conversas", "/api/metricas"]) {
-      expect((await chamar(rota)).codigo).toBe(401);
+    // A lista cresce junto com o painel de propósito: rota nova que esqueça
+    // a guarda é justamente o erro que ninguém percebe até vazar conversa.
+    const protegidas = [
+      "/api/config",
+      "/api/conversas",
+      "/api/metricas",
+      "/api/demandas",
+      "/api/saidas",
+      "/api/log",
+      "/api/produtos",
+      "/api/motos",
+      "/api/servicos",
+      "/api/versoes",
+      "/api/whatsapp",
+    ];
+    for (const rota of protegidas) {
+      expect((await chamar(rota)).codigo, rota).toBe(401);
+    }
+  });
+
+  it("recusa escrita sem cookie, e não só leitura", async () => {
+    const escritas: [string, string][] = [
+      ["/api/produtos", "POST"],
+      ["/api/servicos", "POST"],
+      ["/api/versoes/restaurar", "POST"],
+      ["/api/whatsapp/qr", "POST"],
+      ["/api/whatsapp/desconectar", "POST"],
+      ["/api/conversas/abc/responder", "POST"],
+      ["/api/prever", "POST"],
+      ["/api/testar", "POST"],
+    ];
+    for (const [rota, metodo] of escritas) {
+      expect((await chamar(rota, { metodo })).codigo, `${metodo} ${rota}`).toBe(401);
     }
   });
 

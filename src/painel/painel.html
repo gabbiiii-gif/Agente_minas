@@ -4,322 +4,1116 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel · Minas Auto Peças</title>
+
+<!--
+  O painel é um painel de moto.
+
+  A palavra já dizia isso e a tela não aproveitava: quem abre isto quer saber,
+  em um olhar e de longe, se o agente está respondendo, se o WhatsApp está
+  conectado e se tem cliente esperando o balcão. É a mesma pergunta que a luz
+  do painel responde quando se gira a chave — por isso as três luzes-piloto
+  ficam fixas no topo, e por isso elas fazem a varredura de ignição ao abrir:
+  acendem todas e apagam, para o dono ver que a luz funciona, e não confundir
+  "tudo apagado" com "tela travada".
+
+  A tela é um arquivo só de propósito. O Fastify serve este HTML direto e o
+  build da Vercel o copia para public/index.html — sem bundler, sem etapa que
+  possa quebrar entre o que se edita e o que o dono abre.
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
 <style>
-  :root {
-    --fundo: #f6f7f9;
-    --papel: #ffffff;
-    --borda: #dfe3e8;
-    --texto: #1a1d21;
-    --suave: #656d76;
-    --acento: #1f6feb;
-    --ok: #1a7f37;
-    --alerta: #9a6700;
-    --perigo: #cf222e;
-    --raio: 10px;
+/* ------------------------------------------------------------------ cores */
+:root {
+  --breu:     #EEF0F3;
+  --carter:   #FFFFFF;
+  --carter2:  #F5F7F9;
+  --traco:    #DBE0E6;
+  --leite:    #14171C;
+  --fumaca:   #5E6672;
+  --ambar:    #A65F00;
+  --ambar-luz:#FFB020;
+  --verde:    #0F7A52;
+  --vermelho: #C22B36;
+  --azul:     #1B62D6;
+  --tinta-acao: #FFFFFF;
+  --raio:     4px;
+  --largura:  1180px;
+  --sombra:   0 1px 2px rgba(20, 23, 28, .06), 0 8px 24px -18px rgba(20, 23, 28, .5);
+}
+
+:root[data-tema="escuro"],
+html:not([data-tema="claro"]) {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-tema="claro"]) {
+    --breu:     #0B0D10;
+    --carter:   #14171C;
+    --carter2:  #1A1E25;
+    --traco:    #272C35;
+    --leite:    #E9ECF1;
+    --fumaca:   #89919F;
+    --ambar:    #FFB020;
+    --ambar-luz:#FFB020;
+    --verde:    #37D08A;
+    --vermelho: #FF6069;
+    --azul:     #6BAEFF;
+    --sombra:   0 1px 0 rgba(255,255,255,.02), 0 18px 40px -28px #000;
+    --tinta-acao: #12151A;
+    color-scheme: dark;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --fundo: #0d1117; --papel: #161b22; --borda: #30363d;
-      --texto: #e6edf3; --suave: #8d96a0; --acento: #4493f8;
-      --ok: #3fb950; --alerta: #d29922; --perigo: #f85149;
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 24px 16px 64px;
-    background: var(--fundo); color: var(--texto);
-    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  .env { max-width: 900px; margin: 0 auto; }
-  header { margin-bottom: 24px; }
-  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  .sub { color: var(--suave); font-size: 14px; }
-  .cartao {
-    background: var(--papel); border: 1px solid var(--borda);
-    border-radius: var(--raio); padding: 20px; margin-bottom: 16px;
-  }
-  .cartao h2 { font-size: 15px; margin: 0 0 4px; }
-  .cartao .dica { color: var(--suave); font-size: 13px; margin: 0 0 16px; }
-  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 5px; }
-  input[type=text], input[type=number], textarea {
-    width: 100%; padding: 9px 11px; font: inherit; color: var(--texto);
-    background: var(--fundo); border: 1px solid var(--borda);
-    border-radius: 7px;
-  }
-  textarea { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px; line-height: 1.5; resize: vertical; }
-  input:focus, textarea:focus { outline: 2px solid var(--acento); outline-offset: -1px; }
-  .linha { display: flex; gap: 14px; flex-wrap: wrap; }
-  .linha > div { flex: 1 1 200px; }
-  button {
-    font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 7px;
-    border: 1px solid var(--borda); background: var(--papel); color: var(--texto);
-    cursor: pointer;
-  }
-  button:hover { border-color: var(--acento); }
-  button.primario { background: var(--acento); border-color: var(--acento); color: #fff; }
-  button:disabled { opacity: .55; cursor: default; }
-  .acoes { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
-  .chave { display: flex; align-items: center; gap: 12px; }
-  .interruptor { position: relative; width: 46px; height: 26px; flex: none; }
-  .interruptor input { opacity: 0; width: 0; height: 0; }
-  .trilho {
-    position: absolute; inset: 0; background: var(--borda);
-    border-radius: 26px; transition: background .15s; cursor: pointer;
-  }
-  .trilho::before {
-    content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px;
-    background: #fff; border-radius: 50%; transition: transform .15s;
-  }
-  input:checked + .trilho { background: var(--ok); }
-  input:checked + .trilho::before { transform: translateX(20px); }
-  .estado { font-weight: 600; }
-  .estado.ligado { color: var(--ok); }
-  .estado.desligado { color: var(--perigo); }
-  .aviso {
-    border-left: 3px solid var(--alerta); background: color-mix(in srgb, var(--alerta) 8%, transparent);
-    padding: 10px 14px; border-radius: 0 7px 7px 0; font-size: 13px; margin-top: 14px;
-  }
-  .recado { font-size: 13px; color: var(--suave); }
-  .recado.ok { color: var(--ok); }
-  .recado.erro { color: var(--perigo); }
-  .metricas { display: flex; gap: 22px; flex-wrap: wrap; }
-  .metrica .n { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
-  .metrica .r { font-size: 12px; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
-  .conversa {
-    background: var(--fundo); border: 1px solid var(--borda); border-radius: 7px;
-    padding: 14px; margin-top: 14px; max-height: 380px; overflow-y: auto;
-  }
-  .balao { margin-bottom: 10px; }
-  .balao .quem { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); }
-  .balao.cliente .quem { color: var(--acento); }
-  .balao.agente .quem { color: var(--ok); }
-  .balao .txt { white-space: pre-wrap; }
-  .tool {
-    font-family: ui-monospace, Consolas, monospace; font-size: 12px;
-    color: var(--suave); border-left: 2px solid var(--borda);
-    padding-left: 10px; margin: 6px 0; overflow-x: auto;
-  }
-  .vazio { color: var(--suave); font-size: 13px; }
-  .abas { display: flex; gap: 6px; margin-bottom: 16px; }
-  .aba {
-    font-weight: 600; padding: 8px 16px; border-radius: 7px;
-    border: 1px solid transparent; background: transparent; color: var(--suave);
-  }
-  .aba.ativa { background: var(--papel); border-color: var(--borda); color: var(--texto); }
-  .lista { margin-top: 14px; }
-  .item {
-    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
-    padding: 11px 12px; border: 1px solid var(--borda); border-radius: 7px;
-    background: var(--papel); margin-bottom: 7px; cursor: pointer;
-  }
-  .item:hover { border-color: var(--acento); }
-  .item.aberta { border-color: var(--acento); }
-  .item .quemE { flex: 1 1 auto; min-width: 0; }
-  .item .nome { font-weight: 600; }
-  .item .tel { font-size: 12px; color: var(--suave); }
-  .item .quando { font-size: 12px; color: var(--suave); white-space: nowrap; }
-  .etiqueta {
-    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-    padding: 3px 8px; border-radius: 20px; white-space: nowrap;
-  }
-  .etiqueta.ia { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
-  .etiqueta.humano { background: color-mix(in srgb, var(--alerta) 18%, transparent); color: var(--alerta); }
-  .etiqueta.fim { background: color-mix(in srgb, var(--suave) 15%, transparent); color: var(--suave); }
-  .cabecalhoConversa { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
-  .cabecalhoConversa h2 { margin: 0; }
-  .balao.humano .quem { color: var(--alerta); }
-  input[type=password] {
-    width: 100%; padding: 9px 11px; font: inherit; color: var(--texto);
-    background: var(--fundo); border: 1px solid var(--borda); border-radius: 7px;
-  }
-  .campoSenha { position: relative; }
-  .campoSenha input { padding-right: 44px; }
-  .olho {
-    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-    border: none; background: none; padding: 6px 8px; cursor: pointer;
-    color: var(--suave); line-height: 0;
-  }
-  .olho:hover { color: var(--texto); }
-  .olho svg { width: 19px; height: 19px; }
+}
+
+html[data-tema="escuro"] {
+  --breu:     #0B0D10;
+  --carter:   #14171C;
+  --carter2:  #1A1E25;
+  --traco:    #272C35;
+  --leite:    #E9ECF1;
+  --fumaca:   #89919F;
+  --ambar:    #FFB020;
+  --ambar-luz:#FFB020;
+  --verde:    #37D08A;
+  --vermelho: #FF6069;
+  --azul:     #6BAEFF;
+  --sombra:   0 1px 0 rgba(255,255,255,.02), 0 18px 40px -28px #000;
+  --tinta-acao: #12151A;
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------- base */
+* { box-sizing: border-box; }
+
+/* `hidden` é como a tela troca de seção, e uma classe com `display` ganha
+   dele por especificidade — foi assim que a tela de login continuou visível
+   por cima do painel. Aqui o atributo volta a mandar. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--breu);
+  color: var(--leite);
+  font: 15px/1.55 Barlow, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .rotulo, .chave, .aba, th, .placa, .etiqueta, .num {
+  font-family: "Barlow Condensed", "Barlow", "Segoe UI", sans-serif;
+}
+
+code, .mono, .dado, textarea#prompt {
+  font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+
+a { color: var(--azul); }
+
+/* Rótulo de instrumento: caixa alta, apertado, pequeno. */
+.rotulo {
+  font-size: 11.5px; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--fumaca);
+}
+
+.env { max-width: var(--largura); margin: 0 auto; padding: 0 18px; }
+
+/* ------------------------------------------------------------- a cabine */
+.cabine {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--carter) 92%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--traco);
+}
+
+.cabine-int {
+  max-width: var(--largura); margin: 0 auto; padding: 12px 18px 10px;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+}
+
+.placa {
+  font-size: 20px; font-weight: 700; letter-spacing: .06em; line-height: 1;
+  text-transform: uppercase; display: flex; align-items: baseline; gap: 8px;
+  white-space: nowrap;
+}
+.placa b { color: var(--ambar); font-weight: 700; }
+.placa span {
+  font-size: 11px; letter-spacing: .18em; color: var(--fumaca); font-weight: 600;
+}
+
+/* As três luzes-piloto. Ficam sempre visíveis: são a razão de abrir a tela. */
+.luzes { display: flex; gap: 8px; flex: 1 1 auto; flex-wrap: wrap; }
+
+.luz {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 12px 6px 10px; border-radius: var(--raio);
+  border: 1px solid var(--traco); background: var(--carter2);
+  cursor: pointer; text-align: left; color: inherit; font: inherit;
+  transition: border-color .15s, background .15s;
+}
+.luz:hover { border-color: var(--ambar); }
+.luz svg { width: 17px; height: 17px; flex: none; }
+.luz .txt { display: flex; flex-direction: column; line-height: 1.15; }
+.luz .txt .r {
+  font-family: "Barlow Condensed", sans-serif; font-size: 10.5px;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--fumaca); font-weight: 600;
+}
+.luz .txt .v { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+
+.luz[data-luz="ok"]      { color: var(--verde); }
+.luz[data-luz="alerta"]  { color: var(--ambar); }
+.luz[data-luz="perigo"]  { color: var(--vermelho); }
+.luz[data-luz="ok"] .v, .luz[data-luz="alerta"] .v, .luz[data-luz="perigo"] .v { color: inherit; }
+.luz[data-luz="apagada"] { color: var(--fumaca); opacity: .75; }
+
+/* Aceso de verdade brilha: é assim que se lê um painel de longe. */
+.luz[data-luz="ok"]     { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--verde) 40%, transparent); }
+.luz[data-luz="alerta"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ambar) 45%, transparent); }
+.luz[data-luz="perigo"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vermelho) 45%, transparent); }
+
+.cabine-fim { display: flex; align-items: center; gap: 8px; }
+
+/* A régua de ticks: a linha de escala do mostrador. Puro enfeite honesto —
+   marca onde a cabine termina sem inventar um dado que não existe. */
+.regua {
+  height: 7px;
+  background-image: repeating-linear-gradient(
+    to right, var(--traco) 0 1px, transparent 1px 14px);
+  opacity: .85;
+}
+
+/* --------------------------------------------------------------- as abas */
+.chaves {
+  max-width: var(--largura); margin: 0 auto; padding: 0 18px;
+  display: flex; gap: 2px; position: relative; overflow-x: auto;
+  scrollbar-width: none;
+}
+.chaves::-webkit-scrollbar { display: none; }
+
+.aba {
+  appearance: none; border: 0; background: none; color: var(--fumaca);
+  font-size: 14px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  padding: 11px 14px 12px; cursor: pointer; white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+.aba:hover { color: var(--leite); }
+.aba[aria-selected="true"] { color: var(--leite); }
+
+.aba .conta {
+  display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 20px;
+  font-family: Barlow, sans-serif; font-size: 11px; font-weight: 700;
+  background: var(--ambar); color: var(--tinta-acao); letter-spacing: 0;
+}
+
+/* Marcador âmbar que desliza entre as abas — a única peça com movimento
+   contínuo na tela, para o olho saber de onde veio o conteúdo novo. */
+.marcador {
+  position: absolute; bottom: 0; height: 2px; background: var(--ambar);
+  width: 0; left: 0; pointer-events: none;
+}
+
+/* ------------------------------------------------------------- as faces */
+main { padding: 24px 0 90px; }
+
+.face {
+  background: var(--carter); border: 1px solid var(--traco);
+  border-radius: var(--raio); margin-bottom: 16px; box-shadow: var(--sombra);
+  position: relative; scroll-margin-top: 132px;
+}
+/* Filete âmbar no topo: a marca da face de instrumento. */
+.face::before {
+  content: ""; position: absolute; inset: -1px auto auto -1px; width: 34px; height: 2px;
+  background: var(--ambar); border-radius: var(--raio) 0 0 0;
+}
+
+.face-topo {
+  display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap;
+  padding: 16px 18px 0;
+}
+.face-topo h2 { font-size: 19px; margin: 2px 0 0; letter-spacing: .01em; font-weight: 600; }
+.face-topo .cresce { flex: 1 1 auto; min-width: 0; }
+.face-corpo { padding: 14px 18px 18px; }
+.dica { color: var(--fumaca); font-size: 13.5px; margin: 5px 0 0; max-width: 68ch; }
+
+/* --------------------------------------------------------- os mostradores */
+.mostradores {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr));
+}
+.mostrador {
+  background: var(--carter2); border: 1px solid var(--traco);
+  border-radius: var(--raio); padding: 14px 15px 13px;
+}
+.mostrador .num {
+  font-size: 30px; font-weight: 700; line-height: 1; letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums;
+}
+.mostrador .num.pequeno { font-size: 21px; }
+.mostrador .rotulo { display: block; margin-top: 7px; }
+.mostrador .pe { font-size: 12px; color: var(--fumaca); margin-top: 3px; }
+.mostrador.acende { border-color: color-mix(in srgb, var(--ambar) 55%, var(--traco)); }
+.mostrador.acende .num { color: var(--ambar); }
+.mostrador.perigo { border-color: color-mix(in srgb, var(--vermelho) 55%, var(--traco)); }
+.mostrador.perigo .num { color: var(--vermelho); }
+
+/* ------------------------------------------------------------ o tacômetro */
+.tacometro {
+  display: flex; align-items: flex-end; gap: 3px; height: 76px;
+  padding: 0 2px; margin-top: 6px;
+}
+.tacometro .barra {
+  flex: 1 1 0; min-width: 3px; background: var(--traco);
+  border-radius: 1px 1px 0 0; height: 3px; position: relative;
+}
+.tacometro .barra.tem { background: var(--ambar); }
+.tacometro .barra.pico { background: var(--vermelho); }
+.escala {
+  display: flex; justify-content: space-between; margin-top: 6px;
+  font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--fumaca);
+}
+
+/* ---------------------------------------------------------- formulário */
+label { display: block; margin: 15px 0 5px; }
+label .rotulo { display: block; }
+/* Campo dentro do label é o formato das gavetas; campo ao lado do label é o
+   das seções. Sem esta regra os dois formatos tinham espaçamento diferente e
+   a linha de três campos saía desalinhada. */
+label > .rotulo + input,
+label > .rotulo + select,
+label > .rotulo + textarea { margin-top: 5px; }
+.linha > label { margin-top: 15px; margin-bottom: 0; align-self: start; }
+
+/* `input[type=text]` não casa com `<input>` sem atributo type — foi assim que
+   metade dos campos das gavetas saiu com a caixa crua do navegador, mais alta
+   que a dos outros e desalinhando a linha. `:where()` mantém a
+   especificidade em zero para `.celula` continuar ganhando na tabela. */
+input:where(:not([type=checkbox], [type=radio], [type=file])),
+select, textarea {
+  width: 100%; padding: 9px 11px; font: inherit; color: var(--leite);
+  background: var(--carter2); border: 1px solid var(--traco);
+  border-radius: var(--raio); transition: border-color .12s;
+}
+select { cursor: pointer; }
+textarea { line-height: 1.55; resize: vertical; }
+textarea#prompt { font-size: 12.5px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible, .luz:focus-visible, .aba:focus-visible, .item:focus-visible {
+  outline: 2px solid var(--ambar); outline-offset: 1px;
+}
+input::placeholder { color: color-mix(in srgb, var(--fumaca) 80%, transparent); }
+
+.linha { display: flex; gap: 14px; flex-wrap: wrap; }
+.linha > * { flex: 1 1 150px; min-width: 0; }
+
+button {
+  font: inherit; font-weight: 600; padding: 8px 15px; border-radius: var(--raio);
+  border: 1px solid var(--traco); background: var(--carter2); color: var(--leite);
+  cursor: pointer; white-space: nowrap; transition: border-color .12s, background .12s;
+}
+button:hover:not(:disabled) { border-color: var(--ambar); }
+button.chave-acao { background: var(--ambar); border-color: var(--ambar); color: var(--tinta-acao); }
+button.chave-acao:hover:not(:disabled) { filter: brightness(1.08); }
+button.risco { color: var(--vermelho); }
+button.risco:hover:not(:disabled) { border-color: var(--vermelho); }
+button.plano { border-color: transparent; background: transparent; }
+button:disabled { opacity: .5; cursor: default; }
+button.mini { padding: 4px 9px; font-size: 12.5px; }
+button[aria-pressed="true"] { border-color: var(--ambar); color: var(--ambar); }
+
+.acoes { display: flex; gap: 9px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+
+/* --------------------------------------------------------- o interruptor */
+.giro { display: flex; align-items: center; gap: 13px; }
+.interruptor { position: relative; width: 46px; height: 26px; flex: none; margin: 0; }
+.interruptor input { opacity: 0; width: 0; height: 0; position: absolute; }
+.trilho {
+  position: absolute; inset: 0; background: var(--traco);
+  border-radius: 3px; transition: background .15s; cursor: pointer;
+}
+.trilho::before {
+  content: ""; position: absolute; width: 18px; height: 18px; left: 4px; top: 4px;
+  background: var(--carter); border-radius: 2px; transition: transform .15s;
+}
+.interruptor input:checked + .trilho { background: var(--verde); }
+.interruptor input:checked + .trilho::before { transform: translateX(20px); }
+.estado { font-weight: 600; }
+.estado.ligado { color: var(--verde); }
+.estado.desligado { color: var(--vermelho); }
+
+/* ----------------------------------------------------------- avisos etc. */
+.aviso {
+  border-left: 2px solid var(--ambar);
+  background: color-mix(in srgb, var(--ambar) 9%, transparent);
+  padding: 11px 14px; border-radius: 0 var(--raio) var(--raio) 0;
+  font-size: 13px; margin-top: 15px;
+}
+.aviso.grave { border-color: var(--vermelho); background: color-mix(in srgb, var(--vermelho) 9%, transparent); }
+.aviso code { font-size: 12px; }
+
+.recado { font-size: 13px; color: var(--fumaca); }
+.recado.ok { color: var(--verde); }
+.recado.erro { color: var(--vermelho); }
+.vazio { color: var(--fumaca); font-size: 13.5px; display: block; padding: 6px 0; }
+
+.etiqueta {
+  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.etiqueta.ia     { color: var(--verde); }
+.etiqueta.humano { color: var(--ambar); }
+.etiqueta.fim    { color: var(--fumaca); }
+.etiqueta.dado   { color: var(--azul); }
+
+/* ------------------------------------------------------------- as listas */
+.lista { margin-top: 12px; }
+.item {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 10px 12px; border: 1px solid var(--traco); border-radius: var(--raio);
+  background: var(--carter); margin-bottom: 6px; cursor: pointer; color: inherit;
+  font: inherit;
+}
+.item:hover { border-color: var(--ambar); }
+.item[aria-current="true"] { border-color: var(--ambar); background: var(--carter2); }
+.item .quemE { flex: 1 1 auto; min-width: 0; }
+.item .nome { font-weight: 600; display: block; }
+.item .tel {
+  font-size: 12px; color: var(--fumaca); display: block;
+  font-family: "JetBrains Mono", monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.item .quando { font-size: 12px; color: var(--fumaca); white-space: nowrap;
+                font-family: "JetBrains Mono", monospace; }
+
+/* ------------------------------------------------------------- a conversa */
+.transcricao {
+  background: var(--carter2); border: 1px solid var(--traco); border-radius: var(--raio);
+  padding: 13px; margin-top: 13px; max-height: 420px; overflow-y: auto;
+}
+.balao { margin-bottom: 11px; }
+.balao .quem {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--fumaca);
+}
+.balao.cliente .quem { color: var(--azul); }
+.balao.agente  .quem { color: var(--verde); }
+.balao.humano  .quem { color: var(--ambar); }
+.balao .txt { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tool {
+  font-family: "JetBrains Mono", monospace; font-size: 11.5px;
+  color: var(--fumaca); border-left: 2px solid var(--traco);
+  padding-left: 10px; margin: 6px 0; overflow-x: auto; white-space: pre;
+}
+
+/* -------------------------------------------------------------- a tabela */
+.rolagem { overflow-x: auto; margin-top: 12px; border: 1px solid var(--traco); border-radius: var(--raio); }
+.rolagem table { min-width: 620px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th {
+  text-align: left; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--fumaca); font-weight: 600; padding: 9px 11px; white-space: nowrap;
+  background: var(--carter2); border-bottom: 1px solid var(--traco); position: sticky; top: 0;
+}
+td { padding: 7px 11px; border-bottom: 1px solid var(--traco); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--carter2); }
+td.dado { font-family: "JetBrains Mono", monospace; font-size: 13px; }
+td.direita, th.direita { text-align: right; }
+tr.inativo td { opacity: .5; }
+
+/* Campo que só parece campo quando se mexe nele: a tabela precisa continuar
+   legível como tabela, e não virar um formulário de cem caixas. */
+.celula {
+  width: 100%; padding: 4px 6px; background: transparent; border: 1px solid transparent;
+  border-radius: 2px; font: inherit; color: inherit;
+}
+.celula:hover { border-color: var(--traco); }
+.celula:focus { background: var(--carter2); border-color: var(--ambar); outline: none; }
+.celula.numero { font-family: "JetBrains Mono", monospace; font-size: 13px; text-align: right; }
+.celula.sujo { border-color: var(--ambar); }
+
+.paginacao { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+
+/* --------------------------------------------------------------- a gaveta */
+.gaveta {
+  position: fixed; inset: 0; z-index: 60; display: flex; justify-content: flex-end;
+  background: color-mix(in srgb, #05070A 55%, transparent);
+}
+.gaveta-face {
+  background: var(--carter); width: min(560px, 100%); height: 100%;
+  overflow-y: auto; border-left: 1px solid var(--traco); padding: 20px;
+}
+.gaveta-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.gaveta-topo h2 { margin: 0; font-size: 20px; }
+
+/* --------------------------------------------------------------- o recado */
+.bandeja {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 80; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none; width: min(520px, calc(100% - 32px));
+}
+.torrada {
+  background: var(--carter); border: 1px solid var(--traco); border-left: 3px solid var(--ambar);
+  border-radius: var(--raio); padding: 10px 14px; box-shadow: var(--sombra);
+  font-size: 14px; width: 100%;
+}
+.torrada.ok   { border-left-color: var(--verde); }
+.torrada.erro { border-left-color: var(--vermelho); }
+
+/* ----------------------------------------------------------------- QR */
+.qr {
+  width: 250px; height: 250px; background: #fff; padding: 12px;
+  border-radius: var(--raio); border: 1px solid var(--traco); display: block;
+}
+.qr-caixa { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+.passos { margin: 0; padding-left: 20px; font-size: 14px; line-height: 2; color: var(--fumaca); }
+.passos b { color: var(--leite); }
+.codigo-par {
+  font-family: "JetBrains Mono", monospace; font-size: 26px; font-weight: 700;
+  letter-spacing: .18em; color: var(--ambar);
+}
+
+/* -------------------------------------------------------------- o diff */
+.diff {
+  font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 1.6;
+  background: var(--carter2); border: 1px solid var(--traco); border-radius: var(--raio);
+  padding: 12px; overflow-x: auto; max-height: 420px; overflow-y: auto; white-space: pre;
+}
+.diff .mais  { color: var(--verde); }
+.diff .menos { color: var(--vermelho); }
+.diff .igual { color: var(--fumaca); opacity: .65; }
+
+/* --------------------------------------------------------------- entrada */
+.portao { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+.portao .face { width: min(400px, 100%); margin: 0; }
+.campoSenha { position: relative; }
+.campoSenha input { padding-right: 42px; }
+.olho {
+  position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  border: 0; background: none; padding: 6px 8px; cursor: pointer;
+  color: var(--fumaca); line-height: 0;
+}
+.olho:hover { color: var(--leite); }
+.olho svg { width: 19px; height: 19px; }
+
+@media (max-width: 620px) {
+  .cabine-int { gap: 10px; }
+  .placa { font-size: 17px; }
+  .luz .txt .v { font-size: 12.5px; }
+  .mostrador .num { font-size: 25px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
 </style>
 </head>
 <body>
-<div class="env">
 
-  <header>
-    <h1>Minas Auto Peças — painel do agente</h1>
-    <div class="sub">Leia as conversas, assuma quando precisar e ajuste o atendimento sem mexer em código.</div>
-  </header>
-
-  <div class="cartao" id="telaLogin" hidden>
-    <h2>Entrar</h2>
-    <p class="dica">O painel mostra conversa de cliente. Só entra quem tem a senha.</p>
-    <label for="senha">Senha</label>
-    <div class="campoSenha">
-      <input type="password" id="senha" autocomplete="current-password">
-      <button type="button" class="olho" id="verSenha" aria-label="Mostrar senha" title="Mostrar senha">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path id="olhoAberto" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle id="olhoPupila" cx="12" cy="12" r="3"/>
-          <line id="olhoCorte" x1="3" y1="3" x2="21" y2="21" style="display:none"/>
-        </svg>
-      </button>
+<!-- ------------------------------------------------------------- entrada -->
+<div class="portao" id="telaLogin" hidden>
+  <div class="face">
+    <div class="face-topo">
+      <div class="cresce">
+        <span class="rotulo">Minas Auto Peças</span>
+        <h2>Painel do agente</h2>
+        <p class="dica">A tela mostra conversa de cliente. Só entra quem tem a senha.</p>
+      </div>
     </div>
-    <div class="acoes">
-      <button class="primario" id="entrar">Entrar</button>
-      <span class="recado" id="recadoLogin"></span>
+    <div class="face-corpo">
+      <label for="senha"><span class="rotulo">Senha</span></label>
+      <div class="campoSenha">
+        <input type="password" id="senha" autocomplete="current-password">
+        <button type="button" class="olho" id="verSenha" aria-label="Mostrar senha" title="Mostrar senha">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+            <line id="olhoCorte" x1="3" y1="3" x2="21" y2="21" style="display:none"/>
+          </svg>
+        </button>
+      </div>
+      <div class="acoes">
+        <button class="chave-acao" id="entrar">Entrar</button>
+        <span class="recado" id="recadoLogin"></span>
+      </div>
     </div>
   </div>
+</div>
 
+<!-- -------------------------------------------------------------- painel -->
 <div id="telaPainel" hidden>
 
-  <nav class="abas">
-    <button class="aba ativa" data-aba="conversas">Conversas</button>
-    <button class="aba" data-aba="config">Configuração</button>
-    <span style="flex:1"></span>
-    <button id="sair">Sair</button>
-  </nav>
+  <header class="cabine">
+    <div class="cabine-int">
+      <div class="placa"><b>Minas</b><span>auto peças</span></div>
 
-  <section id="abaConversas">
-    <div class="cartao">
-      <div class="cabecalhoConversa">
-        <h2>Conversas</h2>
-        <span style="flex:1"></span>
-        <button id="atualizar">Atualizar</button>
+      <div class="luzes" id="luzes">
+        <button class="luz" id="luzAgente" data-luz="apagada" data-ir="ajustes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2v6M4.9 7.9l4.2 4.2M2 16h6M22 16h-6M19.1 7.9l-4.2 4.2"/>
+            <circle cx="12" cy="17" r="4"/>
+          </svg>
+          <span class="txt"><span class="r">Agente</span><span class="v" id="vAgente">—</span></span>
+        </button>
+
+        <button class="luz" id="luzZap" data-luz="apagada" data-ir="whatsapp">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span class="txt"><span class="r">WhatsApp</span><span class="v" id="vZap">—</span></span>
+        </button>
+
+        <button class="luz" id="luzBalcao" data-luz="apagada" data-ir="conversas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          </svg>
+          <span class="txt"><span class="r">Balcão</span><span class="v" id="vBalcao">—</span></span>
+        </button>
       </div>
-      <p class="dica">Durante o piloto, leia todas, todo dia. Procure por preço dito, quantidade dita, compatibilidade afirmada sem confirmação e código inventado.</p>
-      <input type="text" id="buscaConversa" placeholder="nome ou telefone">
-      <div class="lista" id="listaConversas"><span class="vazio">carregando…</span></div>
-    </div>
 
-    <div class="cartao" id="detalhe" hidden>
-      <div class="cabecalhoConversa">
-        <h2 id="detalheNome"></h2>
-        <span class="etiqueta" id="detalheEtiqueta"></span>
-      </div>
-      <p class="dica" id="detalheSub"></p>
-      <div class="chave">
-        <label class="interruptor" style="margin:0">
-          <input type="checkbox" id="iaConversa">
-          <span class="trilho"></span>
-        </label>
-        <span class="estado" id="estadoIa"></span>
-      </div>
-      <p class="dica" style="margin-top:10px">Desligar aqui cala o agente só nesta conversa, por 6 horas, e marca que o balcão assumiu.</p>
-      <div class="conversa" id="historicoConversa"></div>
-    </div>
-  </section>
-
-<section id="abaConfig" hidden>
-
-  <div class="cartao">
-    <h2>Atendimento automático</h2>
-    <p class="dica">Desligar faz o agente parar de responder na hora. As mensagens continuam chegando e ficam para o balcão.</p>
-    <div class="chave">
-      <label class="interruptor" style="margin:0">
-        <input type="checkbox" id="botAtivo">
-        <span class="trilho"></span>
-      </label>
-      <span class="estado" id="estadoBot">carregando…</span>
-    </div>
-  </div>
-
-  <div class="cartao">
-    <h2>Dados da loja</h2>
-    <p class="dica">Entram no prompt: é o que o agente responde quando perguntam horário ou endereço.</p>
-    <label for="horario">Horário de funcionamento</label>
-    <input type="text" id="horario">
-    <label for="endereco">Endereço</label>
-    <input type="text" id="endereco">
-    <div class="linha">
-      <div>
-        <label for="teto">Contatos novos por hora</label>
-        <input type="number" id="teto" min="1" max="200">
-      </div>
-      <div>
-        <label for="maxMsg">Mensagens antes de chamar humano</label>
-        <input type="number" id="maxMsg" min="5" max="200">
+      <div class="cabine-fim">
+        <button id="tema" class="mini plano" title="Alternar claro e escuro" aria-label="Alternar claro e escuro">◐</button>
+        <button id="sair" class="mini">Sair</button>
       </div>
     </div>
-    <div class="aviso">
-      O teto por hora existe contra banimento: número não oficial que fala com muita gente nova de uma vez é padrão que o WhatsApp pune.
-    </div>
-  </div>
 
-  <div class="cartao">
-    <h2>Instruções do agente</h2>
-    <p class="dica">O texto que manda no comportamento. Editar aqui substitui o padrão do sistema — inclusive as regras de proteção, então leia antes de apagar.</p>
-    <textarea id="prompt" rows="22" spellcheck="false"></textarea>
-    <div class="acoes">
-      <button id="restaurar">Restaurar padrão</button>
-      <span class="recado" id="recadoPrompt"></span>
-    </div>
-    <div class="aviso">
-      Três regras não deveriam sair daqui: nunca falar preço, nunca dizer quantidade,
-      e só afirmar compatibilidade quando vier <code>fitment: humano</code>.
-      Preço e quantidade também estão travados fora do prompt — a ferramenta de busca
-      não entrega esses dados ao modelo, então nem editando o texto ele consegue dizer.
-    </div>
-  </div>
+    <div class="regua" aria-hidden="true"></div>
 
-  <div class="cartao">
-    <h2>Testar antes de salvar</h2>
-    <p class="dica">Escreva como um cliente escreveria. Roda contra o catálogo real, usando o texto que está aí em cima.</p>
-    <label for="teste">Mensagem do cliente</label>
-    <input type="text" id="teste" placeholder="tem pastilha de freio da biz 125?">
-    <div class="acoes">
-      <button class="primario" id="enviarTeste">Enviar</button>
-      <button id="limparTeste">Limpar conversa</button>
-      <span class="recado" id="recadoTeste"></span>
-    </div>
-    <div class="conversa" id="conversa"><span class="vazio">Nenhuma mensagem ainda.</span></div>
-  </div>
+    <nav class="chaves" role="tablist" aria-label="Seções do painel">
+      <button class="aba" role="tab" data-aba="visao"    aria-selected="true">Visão</button>
+      <button class="aba" role="tab" data-aba="conversas" aria-selected="false">Conversas</button>
+      <button class="aba" role="tab" data-aba="catalogo"  aria-selected="false">Catálogo</button>
+      <button class="aba" role="tab" data-aba="servicos"  aria-selected="false">Serviços</button>
+      <button class="aba" role="tab" data-aba="agente"    aria-selected="false">Agente</button>
+      <button class="aba" role="tab" data-aba="whatsapp"  aria-selected="false">WhatsApp</button>
+      <button class="aba" role="tab" data-aba="ajustes"   aria-selected="false">Ajustes</button>
+      <span class="marcador" id="marcador" aria-hidden="true"></span>
+    </nav>
+  </header>
 
-  <div class="cartao">
-    <h2>Catálogo</h2>
-    <div class="metricas" id="metricas"><span class="vazio">carregando…</span></div>
-  </div>
+  <main class="env">
 
-  <div class="acoes">
-    <button class="primario" id="salvar">Salvar tudo</button>
-    <span class="recado" id="recadoSalvar"></span>
-  </div>
+    <!-- ---------------------------------------------------------- visão -->
+    <section id="secVisao" role="tabpanel">
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Últimas 24 horas</span>
+            <h2>Como está o atendimento</h2>
+          </div>
+          <button id="recarregarVisao" class="mini">Atualizar</button>
+        </div>
+        <div class="face-corpo">
+          <div class="mostradores" id="mostradores"><span class="vazio">carregando…</span></div>
 
-</section>
+          <div style="margin-top:22px">
+            <span class="rotulo">Mensagens por hora</span>
+            <div class="tacometro" id="tacometro" aria-hidden="true"></div>
+            <div class="escala" id="escalaTaco"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="face" id="faceSaidas" hidden>
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Mensagens presas</span>
+            <h2>Cliente esperando resposta que não saiu</h2>
+            <p class="dica">Cada linha é uma resposta que o Evolution recusou. Depois de religar o WhatsApp, responda estas pessoas pelo balcão.</p>
+          </div>
+        </div>
+        <div class="face-corpo"><div class="rolagem" id="tabelaSaidas"></div></div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Lista de compra</span>
+            <h2>O que pediram e a loja não tinha</h2>
+            <p class="dica">Agrupado pelo que o cliente escreveu. Peça que aparece muitas vezes é venda perdida repetida.</p>
+          </div>
+          <select id="diasDemanda" style="width:auto">
+            <option value="7">7 dias</option>
+            <option value="30" selected>30 dias</option>
+            <option value="90">90 dias</option>
+          </select>
+        </div>
+        <div class="face-corpo"><div id="listaDemandas"><span class="vazio">carregando…</span></div></div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Registro</span>
+            <h2>O que mexeram no painel</h2>
+          </div>
+        </div>
+        <div class="face-corpo"><div id="listaLog"><span class="vazio">carregando…</span></div></div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------ conversas -->
+    <section id="secConversas" role="tabpanel" hidden>
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Piloto</span>
+            <h2>Conversas</h2>
+            <p class="dica">Leia todas, todo dia. Procure por preço dito, quantidade dita, compatibilidade afirmada sem confirmação e código inventado.</p>
+          </div>
+          <button id="atualizarConversas" class="mini">Atualizar</button>
+        </div>
+        <div class="face-corpo">
+          <input type="search" id="buscaConversa" placeholder="nome ou telefone">
+          <div class="acoes" style="margin-top:10px">
+            <button class="mini filtro" data-filtro="todas" aria-pressed="true">Todas</button>
+            <button class="mini filtro" data-filtro="balcao" aria-pressed="false">Aguardando balcão</button>
+            <button class="mini filtro" data-filtro="ia" aria-pressed="false">Com a IA</button>
+            <button class="mini filtro" data-filtro="encerrada" aria-pressed="false">Encerradas</button>
+          </div>
+          <div class="lista" id="listaConversas"><span class="vazio">carregando…</span></div>
+        </div>
+      </div>
+
+      <div class="face" id="detalhe" hidden>
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo" id="detalheSub"></span>
+            <h2 id="detalheNome"></h2>
+          </div>
+          <span class="etiqueta" id="detalheEtiqueta"></span>
+        </div>
+        <div class="face-corpo">
+          <div class="giro">
+            <label class="interruptor">
+              <input type="checkbox" id="iaConversa">
+              <span class="trilho"></span>
+            </label>
+            <span class="estado" id="estadoIa"></span>
+          </div>
+          <p class="dica">Desligar cala o agente só nesta conversa, por 6 horas, e marca que o balcão assumiu.</p>
+
+          <div class="transcricao" id="historicoConversa"></div>
+
+          <label for="respostaManual"><span class="rotulo">Responder como balcão</span></label>
+          <textarea id="respostaManual" rows="3" placeholder="Sai pelo mesmo WhatsApp da loja e fica no histórico."></textarea>
+          <div class="acoes">
+            <button class="chave-acao" id="enviarManual">Enviar ao cliente</button>
+            <span class="recado" id="recadoManual"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- catálogo -->
+    <section id="secCatalogo" role="tabpanel" hidden>
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Peças</span>
+            <h2>Catálogo</h2>
+            <p class="dica">Corrija estoque e digite preço direto na linha — sai do campo, salva. O preço fica para o balcão: o agente continua sem falar valor.</p>
+          </div>
+          <button id="novoProduto" class="chave-acao mini">Cadastrar peça</button>
+        </div>
+        <div class="face-corpo">
+          <input type="search" id="buscaProduto" placeholder="código ou descrição (titan 150, pastilha, 4402)">
+          <div class="acoes" style="margin-top:10px">
+            <button class="mini filtroProd" data-filtro="todos"       aria-pressed="true">Ativas</button>
+            <button class="mini filtroProd" data-filtro="sem_preco"   aria-pressed="false">Sem preço</button>
+            <button class="mini filtroProd" data-filtro="sem_estoque" aria-pressed="false">Zeradas</button>
+            <button class="mini filtroProd" data-filtro="sem_fitment" aria-pressed="false">Sem moto</button>
+            <button class="mini filtroProd" data-filtro="inativos"    aria-pressed="false">Desativadas</button>
+          </div>
+          <div class="rolagem" id="tabelaProdutos"><span class="vazio" style="padding:14px">carregando…</span></div>
+          <div class="paginacao">
+            <button id="prodAnterior" class="mini">Anterior</button>
+            <span class="recado" id="prodContagem"></span>
+            <button id="prodProxima" class="mini">Próxima</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- serviços -->
+    <section id="secServicos" role="tabpanel" hidden>
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Oficina</span>
+            <h2>Serviços</h2>
+            <p class="dica">Mão de obra não vem do ERP. O que estiver aqui é o que a loja cobra — e é o que o balcão consulta quando o cliente pergunta.</p>
+          </div>
+          <button id="novoServico" class="chave-acao mini">Cadastrar serviço</button>
+        </div>
+        <div class="face-corpo">
+          <input type="search" id="buscaServico" placeholder="troca de óleo, revisão, relação…">
+          <div class="rolagem" id="tabelaServicos"><span class="vazio" style="padding:14px">carregando…</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- agente -->
+    <section id="secAgente" role="tabpanel" hidden>
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Versão do agente</span>
+            <h2>Qual modelo atende</h2>
+            <p class="dica">Trocar vale na conversa seguinte, sem deploy. Mais capaz custa mais por mensagem; mais rápido erra mais em conversa difícil.</p>
+          </div>
+        </div>
+        <div class="face-corpo">
+          <div id="modelos"></div>
+        </div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Instruções</span>
+            <h2>O texto que manda no comportamento</h2>
+            <p class="dica">Editar substitui o padrão do sistema — inclusive as regras de proteção. Leia antes de apagar.</p>
+          </div>
+          <button id="restaurarPadrao" class="mini">Voltar ao padrão</button>
+        </div>
+        <div class="face-corpo">
+          <textarea id="prompt" rows="20" spellcheck="false"></textarea>
+          <label for="notaVersao"><span class="rotulo">Bilhete desta versão</span></label>
+          <input type="text" id="notaVersao" placeholder="ex.: cortei a repetição de desculpa">
+          <div class="acoes">
+            <button class="chave-acao" id="publicar">Publicar versão</button>
+            <span class="recado" id="recadoPublicar"></span>
+          </div>
+          <div class="aviso">
+            Três regras não deveriam sair daqui: nunca falar preço, nunca dizer quantidade,
+            e só afirmar compatibilidade quando vier <code>fitment: humano</code>.
+            Preço e quantidade também estão travados fora do texto — a busca não entrega
+            esses dados ao modelo, então nem editando aqui ele consegue dizer.
+          </div>
+        </div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Antes de publicar</span>
+            <h2>Testar</h2>
+            <p class="dica">Escreva como um cliente escreveria. Roda contra o catálogo real, com o texto e o modelo que estão nesta tela.</p>
+          </div>
+          <button id="limparTeste" class="mini">Limpar</button>
+        </div>
+        <div class="face-corpo">
+          <div class="linha">
+            <input type="text" id="teste" placeholder="tem pastilha de freio da biz 125?">
+            <button class="chave-acao" id="enviarTeste" style="flex:0 0 auto">Enviar</button>
+          </div>
+          <div class="transcricao" id="conversaTeste"><span class="vazio">Nenhuma mensagem ainda.</span></div>
+          <span class="recado" id="recadoTeste"></span>
+        </div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Histórico</span>
+            <h2>Versões publicadas</h2>
+            <p class="dica">Restaurar devolve o modelo e o texto daquela versão. O histórico não é reescrito.</p>
+          </div>
+        </div>
+        <div class="face-corpo"><div id="listaVersoes"><span class="vazio">carregando…</span></div></div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- whatsapp -->
+    <section id="secWhatsapp" role="tabpanel" hidden>
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Conexão</span>
+            <h2 id="tituloZap">Verificando…</h2>
+            <p class="dica" id="subZap"></p>
+          </div>
+          <button id="conferirZap" class="mini">Conferir agora</button>
+        </div>
+        <div class="face-corpo">
+          <div class="mostradores" id="mostradoresZap"></div>
+
+          <div class="acoes">
+            <button class="chave-acao" id="parear">Conectar / trocar número</button>
+            <button id="reiniciarZap">Reiniciar conexão</button>
+            <button class="risco" id="desconectarZap">Desconectar número</button>
+          </div>
+          <p class="dica">Reiniciar mantém o número e refaz a conexão — é o que resolve quando o painel diz conectado mas mensagem nenhuma chega. Desconectar tira o aparelho da lista do WhatsApp; depois disso o próximo QR pareia outro número.</p>
+
+          <div id="areaQr" hidden style="margin-top:18px">
+            <div class="qr-caixa">
+              <div>
+                <img class="qr" id="imgQr" alt="QR code para parear o WhatsApp">
+                <p class="dica" id="contagemQr" style="text-align:center;margin-top:8px"></p>
+              </div>
+              <div>
+                <span class="rotulo">No celular da loja</span>
+                <ol class="passos">
+                  <li>Abra o <b>WhatsApp</b></li>
+                  <li>Toque nos três pontos, <b>Dispositivos conectados</b></li>
+                  <li>Toque em <b>Conectar dispositivo</b></li>
+                  <li>Aponte a câmera para este código</li>
+                </ol>
+                <div id="areaCodigo" hidden>
+                  <span class="rotulo">Ou digite este código</span>
+                  <div class="codigo-par" id="codigoPar"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- -------------------------------------------------------- ajustes -->
+    <section id="secAjustes" role="tabpanel" hidden>
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Chave geral</span>
+            <h2>Atendimento automático</h2>
+            <p class="dica">Desligar faz o agente parar de responder na hora. As mensagens continuam chegando e ficam para o balcão.</p>
+          </div>
+        </div>
+        <div class="face-corpo">
+          <div class="giro">
+            <label class="interruptor">
+              <input type="checkbox" id="botAtivo">
+              <span class="trilho"></span>
+            </label>
+            <span class="estado" id="estadoBot">carregando…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
+            <span class="rotulo">Dados da loja</span>
+            <h2>O que o agente responde sobre a loja</h2>
+            <p class="dica">Entram no texto das instruções: é o que ele diz quando perguntam horário ou endereço.</p>
+          </div>
+        </div>
+        <div class="face-corpo">
+          <label for="horario"><span class="rotulo">Horário de funcionamento</span></label>
+          <input type="text" id="horario">
+          <label for="endereco"><span class="rotulo">Endereço</span></label>
+          <input type="text" id="endereco">
+          <div class="linha">
+            <div>
+              <label for="teto"><span class="rotulo">Contatos novos por hora</span></label>
+              <input type="number" id="teto" min="1" max="200">
+            </div>
+            <div>
+              <label for="maxMsg"><span class="rotulo">Mensagens antes de chamar humano</span></label>
+              <input type="number" id="maxMsg" min="5" max="200">
+            </div>
+          </div>
+          <div class="aviso">
+            O teto por hora existe contra banimento: número não oficial que fala com muita
+            gente nova de uma vez é padrão que o WhatsApp pune.
+          </div>
+          <div class="acoes">
+            <button class="chave-acao" id="salvarAjustes">Salvar ajustes</button>
+            <span class="recado" id="recadoAjustes"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
 </div>
+
+<!-- --------------------------------------------------------- a gaveta -->
+<div class="gaveta" id="gaveta" hidden>
+  <div class="gaveta-face" role="dialog" aria-modal="true" aria-labelledby="gavetaTitulo">
+    <div class="gaveta-topo">
+      <h2 id="gavetaTitulo" class="cresce" style="flex:1"></h2>
+      <button id="fecharGaveta" class="mini plano" aria-label="Fechar">✕</button>
+    </div>
+    <div id="gavetaCorpo"></div>
+  </div>
 </div>
 
+<div class="bandeja" id="bandeja" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/animejs@4/dist/bundles/anime.umd.min.js"></script>
 <script>
+/* ===================================================================
+   Ferramentas da casa
+   =================================================================== */
 const $ = (id) => document.getElementById(id);
-let padraoDoSistema = "";
-let historico = [];
-let conversaAberta = null;
-let recarga = null;
+const $$ = (sel, raiz = document) => [...raiz.querySelectorAll(sel)];
+
+const REDUZIR = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
- * Toda chamada passa por aqui para que 401 tenha um lugar só.
- * Sessão vence em 12h, e ela vencer no meio do uso é normal — o certo é
- * voltar ao login, não quebrar a tela com erro.
+ * Anime.js vem de CDN e a loja fica em Altamira: internet ruim é rotina.
+ * Toda animação passa por aqui, e aqui ela é opcional — sem a biblioteca, ou
+ * com movimento reduzido ligado no sistema, a tela simplesmente aparece
+ * pronta. Nenhum estado final da interface depende de uma animação ter
+ * rodado.
  */
-async function api(caminho, init) {
-  const r = await fetch(caminho, init);
-  if (r.status === 401) { mostrarLogin(); throw new Error("sessão expirada"); }
-  return r;
+function anima(alvo, props) {
+  if (REDUZIR || !window.anime || !window.anime.animate) return null;
+  try { return window.anime.animate(alvo, props); } catch { return null; }
 }
 
-const escapar = (t) => String(t ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+function escalonar(atraso) {
+  const s = window.anime && window.anime.stagger;
+  return s ? s(atraso) : 0;
+}
+
+const escapar = (t) =>
+  String(t ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+
+const numero = (n) => new Intl.NumberFormat("pt-BR").format(n);
+
+/** Centavos para reais. `null` vira travessão: não é zero, é "não sei". */
+const moeda = (centavos) =>
+  centavos === null || centavos === undefined
+    ? "—"
+    : (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/**
+ * Lê o que o balcão digitou como preço.
+ *
+ * Aceita "45", "45,90", "R$ 45,90" e "45.90" — as quatro aparecem quando se
+ * digita depressa. Devolve `null` para campo vazio, que é diferente de zero.
+ */
+function paraCentavos(texto) {
+  const limpo = String(texto ?? "").replace(/[^\d,.-]/g, "").trim();
+  if (limpo === "") return null;
+  const normal = limpo.includes(",") ? limpo.replace(/\./g, "").replace(",", ".") : limpo;
+  const valor = Number(normal);
+  if (!Number.isFinite(valor) || valor < 0) return undefined; // undefined = inválido
+  return Math.round(valor * 100);
+}
 
 const quando = (iso) => {
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
   const hoje = new Date().toDateString() === d.toDateString();
   return hoje
     ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 };
 
+const quandoLongo = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+};
+
+/** Recado que aparece e some. Substitui o texto solto que ficava na tela. */
+function torrada(texto, tipo = "") {
+  const el = document.createElement("div");
+  el.className = "torrada " + tipo;
+  el.textContent = texto;
+  $("bandeja").append(el);
+  anima(el, { opacity: [0, 1], translateY: [12, 0], duration: 260, ease: "outQuad" });
+  setTimeout(() => {
+    const saida = anima(el, { opacity: 0, translateY: 8, duration: 200 });
+    if (saida && saida.then) saida.then(() => el.remove());
+    else setTimeout(() => el.remove(), 220);
+  }, 3400);
+}
+
+function recado(el, texto, tipo = "") {
+  el.textContent = texto;
+  el.className = "recado " + tipo;
+  if (texto) setTimeout(() => { if (el.textContent === texto) el.textContent = ""; }, 5000);
+}
+
+/** Toda chamada passa por aqui para que 401 tenha um lugar só. */
+async function api(caminho, init) {
+  const r = await fetch(caminho, {
+    ...init,
+    headers: init?.body ? { "Content-Type": "application/json", ...(init.headers ?? {}) } : init?.headers,
+  });
+  if (r.status === 401) { mostrarLogin(); throw new Error("sessão expirada"); }
+  return r;
+}
+
+/** GET que já devolve JSON — é o que 90% das chamadas fazem. */
+const pegar = async (caminho) => (await api(caminho)).json();
+
+/** POST/PUT que devolve o corpo e lança com a mensagem do servidor. */
+async function mandar(caminho, metodo, corpo) {
+  const r = await api(caminho, { method: metodo, body: JSON.stringify(corpo ?? {}) });
+  const dados = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(dados.erro ?? `falhou (${r.status})`);
+  return dados;
+}
+
+/** Número que sobe do zero, como ponteiro que sai do batente. */
+function contar(el, alvo) {
+  const fim = Number(alvo) || 0;
+  if (REDUZIR || !window.anime) { el.textContent = numero(fim); return; }
+  const passo = { v: 0 };
+  const rodou = anima(passo, {
+    v: fim, duration: 850, ease: "outExpo",
+    onUpdate: () => { el.textContent = numero(Math.round(passo.v)); },
+  });
+  if (!rodou) el.textContent = numero(fim);
+}
+
+/* ===================================================================
+   Estado da tela
+   =================================================================== */
+let cfg = null;             // configuração salva, como veio do servidor
+let padraoDoSistema = "";
+let historicoTeste = [];
+let conversaAberta = null;
+let conversasEmTela = [];
+let filtroConversa = "todas";
+let filtroProduto = "todos";
+let paginaProduto = 1;
+let paginaAtual = "visao";
+let recargaConversas = null;
+let recargaQr = null;
+let jaCarregou = new Set();
+
+/* ===================================================================
+   Tema
+   =================================================================== */
+(function iniciarTema() {
+  const salvo = localStorage.getItem("painel_tema");
+  if (salvo) document.documentElement.dataset.tema = salvo;
+})();
+
+$("tema").addEventListener("click", () => {
+  const atual = document.documentElement.dataset.tema;
+  const escuroAgora = atual
+    ? atual === "escuro"
+    : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const novo = escuroAgora ? "claro" : "escuro";
+  document.documentElement.dataset.tema = novo;
+  localStorage.setItem("painel_tema", novo);
+});
+
+/* ===================================================================
+   Entrar e sair
+   =================================================================== */
 function mostrarLogin() {
-  clearInterval(recarga);
+  clearInterval(recargaConversas);
+  clearInterval(recargaQr);
+  jaCarregou = new Set();
   $("telaLogin").hidden = false;
   $("telaPainel").hidden = true;
   $("senha").focus();
@@ -328,18 +1122,43 @@ function mostrarLogin() {
 function mostrarPainel() {
   $("telaLogin").hidden = true;
   $("telaPainel").hidden = false;
-  carregar();
-  carregarConversas();
-  // O piloto é acompanhado ao vivo; 20s é suficiente para não parecer parado
-  // e leve o bastante para o banco não sentir.
-  recarga = setInterval(() => { if (!$("abaConversas").hidden) carregarConversas(); }, 20000);
+  ignicao();
+  irPara(location.hash.slice(1) || "visao");
+  atualizarLuzes();
+  // O piloto é acompanhado ao vivo. 20s é o suficiente para não parecer
+  // parado e leve o bastante para o banco não sentir.
+  recargaConversas = setInterval(() => {
+    atualizarLuzes();
+    if (paginaAtual === "conversas") carregarConversas();
+  }, 20000);
+}
+
+/**
+ * A varredura de ignição.
+ *
+ * Moto de verdade acende todas as luzes do painel quando se gira a chave, e
+ * apaga em seguida: é como o piloto sabe que a lâmpada não queimou. Aqui vale
+ * o mesmo — sem isto, "nenhuma luz acesa" e "tela travada carregando" têm
+ * exatamente a mesma aparência.
+ */
+function ignicao() {
+  const luzes = $$(".luz");
+  luzes.forEach((l) => (l.dataset.luz = "alerta"));
+  anima(luzes, {
+    opacity: [0.25, 1],
+    duration: 420,
+    delay: escalonar(90),
+    ease: "outQuad",
+  });
+  anima(".face", { opacity: [0, 1], translateY: [10, 0], duration: 420, delay: escalonar(45), ease: "outQuad" });
 }
 
 async function entrar() {
   $("entrar").disabled = true;
   try {
     const r = await fetch("/api/entrar", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ senha: $("senha").value }),
     });
     if (!r.ok) throw new Error("senha incorreta");
@@ -357,13 +1176,264 @@ async function sair() {
   mostrarLogin();
 }
 
-async function carregarConversas() {
-  const busca = encodeURIComponent($("buscaConversa").value.trim());
-  const lista = await (await api("/api/conversas?busca=" + busca)).json();
-  const el = $("listaConversas");
+/* ===================================================================
+   Navegação
+   =================================================================== */
+const SECOES = {
+  visao: "secVisao", conversas: "secConversas", catalogo: "secCatalogo",
+  servicos: "secServicos", agente: "secAgente", whatsapp: "secWhatsapp",
+  ajustes: "secAjustes",
+};
+
+const CARREGADORES = {
+  visao: carregarVisao,
+  conversas: carregarConversas,
+  catalogo: carregarProdutos,
+  servicos: carregarServicos,
+  agente: carregarAgente,
+  whatsapp: conferirZap,
+  ajustes: carregarAjustes,
+};
+
+function irPara(nome) {
+  if (!SECOES[nome]) nome = "visao";
+  paginaAtual = nome;
+  location.hash = nome;
+
+  for (const [aba, sec] of Object.entries(SECOES)) {
+    $(sec).hidden = aba !== nome;
+  }
+  for (const b of $$(".aba")) {
+    b.setAttribute("aria-selected", String(b.dataset.aba === nome));
+  }
+
+  moverMarcador();
+
+  // Carrega na primeira visita; depois só quando o dono pedir. Recarregar
+  // tudo a cada troca de aba fazia o painel piscar sem motivo.
+  if (!jaCarregou.has(nome)) {
+    jaCarregou.add(nome);
+    CARREGADORES[nome]().catch((e) => torrada(e.message, "erro"));
+  }
+
+  anima($(SECOES[nome]), { opacity: [0, 1], duration: 220, ease: "outQuad" });
+}
+
+function moverMarcador() {
+  const ativa = $$(".aba").find((b) => b.getAttribute("aria-selected") === "true");
+  if (!ativa) return;
+  const barra = $("marcador");
+  const alvo = { left: ativa.offsetLeft - ativa.parentElement.scrollLeft, width: ativa.offsetWidth };
+  const rodou = anima(barra, { left: alvo.left, width: alvo.width, duration: 280, ease: "outExpo" });
+  if (!rodou) {
+    barra.style.left = alvo.left + "px";
+    barra.style.width = alvo.width + "px";
+  }
+}
+
+window.addEventListener("resize", moverMarcador);
+document.querySelector(".chaves").addEventListener("scroll", moverMarcador, { passive: true });
+
+/* ===================================================================
+   As luzes da cabine
+   =================================================================== */
+async function atualizarLuzes() {
+  try {
+    const [c, m, z] = await Promise.all([
+      pegar("/api/config"),
+      pegar("/api/metricas"),
+      pegar("/api/whatsapp"),
+    ]);
+    cfg = c;
+
+    pintarLuz("luzAgente", "vAgente",
+      c.botAtivo ? "Respondendo" : "Desligado",
+      c.botAtivo ? "ok" : "perigo");
+
+    const rotuloZap = {
+      conectado: z.numero ? "+" + z.numero : "Conectado",
+      conectando: "Lendo QR…",
+      desconectado: "Caiu",
+      sem_instancia: z.configurado ? "Sem pareamento" : "Não configurado",
+    }[z.estado];
+    pintarLuz("luzZap", "vZap", rotuloZap,
+      z.estado === "conectado" ? "ok" : z.estado === "conectando" ? "alerta" : "perigo");
+
+    pintarLuz("luzBalcao", "vBalcao",
+      m.aguardando === 0 ? "Ninguém na fila" : `${m.aguardando} esperando`,
+      m.aguardando === 0 ? "apagada" : "alerta");
+
+    marcarAba("conversas", m.aguardando);
+  } catch {
+    // Falha de rede não pode apagar o painel; a próxima volta arruma.
+  }
+}
+
+function pintarLuz(idLuz, idValor, texto, estado) {
+  const luz = $(idLuz);
+  const antes = luz.dataset.luz;
+  luz.dataset.luz = estado;
+  $(idValor).textContent = texto;
+  // Só pisca quando acabou de mudar: piscar a cada 20 segundos vira ruído e
+  // ninguém mais olha.
+  if (antes !== estado && antes !== "apagada") {
+    anima(luz, { scale: [1, 1.05, 1], duration: 360, ease: "outQuad" });
+  }
+}
+
+function marcarAba(nome, quantos) {
+  const aba = $$(".aba").find((b) => b.dataset.aba === nome);
+  if (!aba) return;
+  const atual = aba.querySelector(".conta");
+  if (!quantos) { atual?.remove(); return; }
+  if (atual) { atual.textContent = quantos; return; }
+  const marca = document.createElement("span");
+  marca.className = "conta";
+  marca.textContent = quantos;
+  aba.append(marca);
+  moverMarcador();
+}
+
+/* ===================================================================
+   Visão
+   =================================================================== */
+async function carregarVisao() {
+  const m = await pegar("/api/metricas");
+
+  const taxa = m.conversas7d > 0 ? Math.round((m.qualificadas7d / m.conversas7d) * 100) : null;
+
+  const tiles = [
+    { r: "conversas hoje", v: m.conversasHoje, pe: `${numero(m.ativas)} ainda abertas` },
+    { r: "mensagens hoje", v: m.mensagensHoje, pe: null },
+    { r: "esperando balcão", v: m.aguardando, pe: null, classe: m.aguardando > 0 ? "acende" : "" },
+    { r: "qualificou em 7 dias", v: taxa === null ? 0 : taxa, sufixo: "%",
+      pe: `${numero(m.qualificadas7d)} de ${numero(m.conversas7d)} conversas` },
+    { r: "peças ativas", v: m.produtos, pe: `${numero(m.comPreco)} com preço` },
+    { r: "peças com moto", v: m.comFitment, pe: `${numero(m.motos)} motos cadastradas` },
+    { r: "serviços", v: m.servicos, pe: null },
+    { r: "pedidos sem peça · 30d", v: m.demandas, pe: null, classe: m.demandas > 0 ? "acende" : "" },
+    { r: "tokens 24h", v: m.tokensIn24h + m.tokensOut24h, pequeno: true,
+      pe: `${numero(m.tokensIn24h)} entrada · ${numero(m.tokensOut24h)} saída` },
+    { r: "mensagens presas", v: m.saidasPresas, pe: null, classe: m.saidasPresas > 0 ? "perigo" : "" },
+  ];
+
+  $("mostradores").innerHTML = tiles.map((t) => `
+    <div class="mostrador ${t.classe ?? ""}">
+      <div class="num ${t.pequeno ? "pequeno" : ""}"><span data-valor="${t.v}">0</span>${t.sufixo ?? ""}</div>
+      <span class="rotulo">${escapar(t.r)}</span>
+      ${t.pe ? `<div class="pe">${escapar(t.pe)}</div>` : ""}
+    </div>`).join("");
+
+  for (const el of $$("#mostradores .num [data-valor]")) contar(el, el.dataset.valor);
+
+  desenharTacometro(m.serie24h ?? []);
+
+  $("faceSaidas").hidden = m.saidasPresas === 0;
+  if (m.saidasPresas > 0) carregarSaidas();
+
+  await Promise.all([carregarDemandas(), carregarLog()]);
+}
+
+function desenharTacometro(serie) {
+  const pico = Math.max(1, ...serie.map((h) => h.mensagens));
+  $("tacometro").innerHTML = serie.map((h) => {
+    const alto = Math.max(3, Math.round((h.mensagens / pico) * 74));
+    const classe = h.mensagens === 0 ? "" : h.mensagens === pico ? "tem pico" : "tem";
+    return `<div class="barra ${classe}" data-alto="${alto}" style="height:3px"
+                 title="${String(h.hora).padStart(2, "0")}h · ${h.mensagens} mensagens"></div>`;
+  }).join("");
+
+  const barras = $$("#tacometro .barra");
+  if (REDUZIR || !window.anime) {
+    barras.forEach((b) => (b.style.height = b.dataset.alto + "px"));
+  } else {
+    barras.forEach((b, i) => {
+      anima(b, { height: [3, Number(b.dataset.alto)], duration: 620, delay: i * 16, ease: "outExpo" });
+    });
+  }
+
+  const primeira = serie[0], ultima = serie.at(-1);
+  $("escalaTaco").innerHTML = serie.length === 0 ? "" :
+    `<span>${String(primeira.hora).padStart(2, "0")}h</span>
+     <span>pico ${pico} msg</span>
+     <span>${String(ultima.hora).padStart(2, "0")}h</span>`;
+}
+
+async function carregarDemandas() {
+  const dias = $("diasDemanda").value;
+  const lista = await pegar("/api/demandas?dias=" + dias);
+  const el = $("listaDemandas");
 
   if (lista.length === 0) {
-    el.innerHTML = '<span class="vazio">Nenhuma conversa ainda. A primeira aparece assim que um cliente escrever.</span>';
+    el.innerHTML = '<span class="vazio">Nada pedido em falta neste período. Ou o catálogo está cobrindo, ou ainda veio pouca gente.</span>';
+    return;
+  }
+
+  el.innerHTML = `<div class="rolagem"><table>
+    <thead><tr><th>Peça pedida</th><th class="direita">Pedidos</th><th>Motivo</th><th>Último</th></tr></thead>
+    <tbody>${lista.map((d) => `<tr>
+      <td>${escapar(d.peca)}</td>
+      <td class="direita dado">${d.pedidos}</td>
+      <td>${d.motivos.map((m) => `<span class="etiqueta fim">${escapar(m.replace(/_/g, " "))}</span>`).join(" ")}</td>
+      <td class="dado">${quandoLongo(d.ultimo)}</td>
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+async function carregarSaidas() {
+  const lista = await pegar("/api/saidas");
+  $("tabelaSaidas").innerHTML = `<table>
+    <thead><tr><th>Telefone</th><th>Mensagem</th><th class="direita">Tentativas</th><th>Erro</th><th>Quando</th></tr></thead>
+    <tbody>${lista.map((s) => `<tr>
+      <td class="dado">${escapar(s.telefone)}</td>
+      <td>${escapar(s.conteudo).slice(0, 90)}</td>
+      <td class="direita dado">${s.tentativas}</td>
+      <td class="dado" style="color:var(--vermelho)">${escapar(s.erro ?? "").slice(0, 60)}</td>
+      <td class="dado">${quandoLongo(s.criadoEm)}</td>
+    </tr>`).join("")}</tbody></table>`;
+}
+
+const NOME_ACAO = {
+  ligar_bot: "ligou o atendimento automático",
+  desligar_bot: "desligou o atendimento automático",
+  assumir_conversa: "assumiu uma conversa",
+  religar_ia: "devolveu a conversa à IA",
+  responder_manual: "respondeu um cliente pelo painel",
+  restaurar_versao: "restaurou uma versão do agente",
+};
+
+async function carregarLog() {
+  const lista = await pegar("/api/log");
+  $("listaLog").innerHTML = lista.length === 0
+    ? '<span class="vazio">Nada registrado ainda.</span>'
+    : lista.map((l) => `<div class="item" style="cursor:default">
+        <span class="quemE">${escapar(NOME_ACAO[l.acao] ?? l.acao)}</span>
+        <span class="quando">${quandoLongo(l.criadoEm)}</span>
+      </div>`).join("");
+}
+
+$("diasDemanda").addEventListener("change", () => carregarDemandas().catch((e) => torrada(e.message, "erro")));
+$("recarregarVisao").addEventListener("click", () => carregarVisao().catch((e) => torrada(e.message, "erro")));
+
+/* ===================================================================
+   Conversas
+   =================================================================== */
+async function carregarConversas() {
+  const busca = encodeURIComponent($("buscaConversa").value.trim());
+  conversasEmTela = await pegar("/api/conversas?busca=" + busca);
+  desenharConversas();
+}
+
+function desenharConversas() {
+  const lista = conversasEmTela.filter((c) => {
+    if (filtroConversa === "balcao") return c.status === "aguardando_humano";
+    if (filtroConversa === "ia") return c.status === "ativa" && c.iaAtiva;
+    if (filtroConversa === "encerrada") return c.status === "encerrada";
+    return true;
+  });
+
+  const el = $("listaConversas");
+  if (lista.length === 0) {
+    el.innerHTML = '<span class="vazio">Nenhuma conversa aqui. A primeira aparece assim que um cliente escrever.</span>';
     return;
   }
 
@@ -372,23 +1442,23 @@ async function carregarConversas() {
       ? '<span class="etiqueta fim">encerrada</span>'
       : c.iaAtiva ? '<span class="etiqueta ia">IA</span>'
                   : '<span class="etiqueta humano">balcão</span>';
-    return `<button class="item ${c.id === conversaAberta ? "aberta" : ""}" data-id="${c.id}">
-      <div class="quemE">
-        <div class="nome">${escapar(c.nome) || "sem nome"}</div>
-        <div class="tel">${escapar(c.telefone)} · ${c.mensagens} mensagens</div>
-      </div>
+    return `<button class="item" data-id="${c.id}" aria-current="${c.id === conversaAberta}">
+      <span class="quemE">
+        <span class="nome">${escapar(c.nome) || "sem nome"}</span>
+        <span class="tel">${escapar(c.telefone)} · ${c.mensagens} mensagens</span>
+      </span>
       ${et}
-      <div class="quando">${quando(c.ultimaMsgEm)}</div>
+      <span class="quando">${quando(c.ultimaMsgEm)}</span>
     </button>`;
   }).join("");
 
-  for (const b of el.querySelectorAll(".item")) {
-    b.addEventListener("click", () => abrirConversa(b.dataset.id));
+  for (const b of $$(".item", el)) {
+    b.addEventListener("click", () => abrirConversa(b.dataset.id).catch((e) => torrada(e.message, "erro")));
   }
 }
 
 async function abrirConversa(id) {
-  const c = await (await api("/api/conversas/" + id)).json();
+  const c = await pegar("/api/conversas/" + id);
   conversaAberta = id;
 
   $("detalhe").hidden = false;
@@ -397,7 +1467,6 @@ async function abrirConversa(id) {
     c.telefone,
     c.moto ? "moto: " + c.moto : "moto não identificada",
     c.desfecho ? "desfecho: " + c.desfecho : null,
-    c.resumo,
   ].filter(Boolean).join(" · ");
 
   const et = $("detalheEtiqueta");
@@ -407,14 +1476,22 @@ async function abrirConversa(id) {
   $("iaConversa").checked = c.iaAtiva;
   pintarEstadoIa();
 
-  $("historicoConversa").innerHTML = c.mensagens.length === 0
+  const hist = $("historicoConversa");
+  hist.innerHTML = c.mensagens.length === 0
     ? '<span class="vazio">Sem mensagens.</span>'
     : c.mensagens.map((m) => `<div class="balao ${m.papel}">
-        <div class="quem">${m.papel} · ${quando(m.criadoEm)}${m.tipoMidia === "imagem" ? " · foto" : ""}</div>
+        <div class="quem">${escapar(m.papel)} · ${quando(m.criadoEm)}${m.tipoMidia === "imagem" ? " · foto" : ""}</div>
         <div class="txt">${escapar(m.conteudo)}</div>
       </div>`).join("");
+  hist.scrollTop = hist.scrollHeight;
 
-  carregarConversas();
+  if (c.resumo) {
+    hist.insertAdjacentHTML("afterbegin",
+      `<div class="aviso" style="margin:0 0 12px">${escapar(c.resumo)}</div>`);
+  }
+
+  desenharConversas();
+  $("detalhe").scrollIntoView({ behavior: REDUZIR ? "auto" : "smooth", block: "nearest" });
 }
 
 function pintarEstadoIa() {
@@ -427,17 +1504,611 @@ async function alternarIa() {
   if (!conversaAberta) return;
   const ativa = $("iaConversa").checked;
   pintarEstadoIa();
-  await api(`/api/conversas/${conversaAberta}/ia`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ativa }),
-  });
-  abrirConversa(conversaAberta);
+  try {
+    await mandar(`/api/conversas/${conversaAberta}/ia`, "POST", { ativa });
+    torrada(ativa ? "IA de volta nesta conversa." : "Conversa é sua. IA calada por 6 horas.", "ok");
+    await abrirConversa(conversaAberta);
+    await carregarConversas();
+    atualizarLuzes();
+  } catch (e) {
+    torrada(e.message, "erro");
+  }
 }
 
-function recado(el, texto, tipo = "") {
-  el.textContent = texto;
-  el.className = "recado " + tipo;
-  if (texto) setTimeout(() => { if (el.textContent === texto) el.textContent = ""; }, 4000);
+async function enviarManual() {
+  const texto = $("respostaManual").value.trim();
+  if (texto === "" || !conversaAberta) return;
+  $("enviarManual").disabled = true;
+  try {
+    await mandar(`/api/conversas/${conversaAberta}/responder`, "POST", { texto });
+    $("respostaManual").value = "";
+    torrada("Enviado. A IA fica calada nesta conversa por 6 horas.", "ok");
+    await abrirConversa(conversaAberta);
+  } catch (e) {
+    recado($("recadoManual"), e.message, "erro");
+  } finally {
+    $("enviarManual").disabled = false;
+  }
+}
+
+/* ===================================================================
+   Catálogo
+   =================================================================== */
+async function carregarProdutos() {
+  const busca = encodeURIComponent($("buscaProduto").value.trim());
+  const p = await pegar(`/api/produtos?busca=${busca}&filtro=${filtroProduto}&pagina=${paginaProduto}`);
+
+  // Larguras fixas nas pontas: sem elas a descrição, que é o campo que
+  // interessa, ficava espremida entre duas colunas de três dígitos.
+  const cabecalho = `<colgroup>
+      <col style="width:88px"><col><col style="width:92px">
+      <col style="width:104px"><col style="width:120px"><col style="width:150px">
+    </colgroup>
+    <thead><tr>
+      <th>Código</th><th>Descrição</th><th class="direita">Estoque</th>
+      <th class="direita">Preço R$</th><th>Moto</th><th></th>
+    </tr></thead>`;
+
+  if (p.itens.length === 0) {
+    $("tabelaProdutos").innerHTML =
+      '<span class="vazio" style="padding:14px">Nenhuma peça com esse filtro.</span>';
+  } else {
+    $("tabelaProdutos").innerHTML = `<table>${cabecalho}<tbody>${p.itens.map((i) => `
+      <tr data-id="${i.id}" class="${i.ativo ? "" : "inativo"}">
+        <td class="dado">${escapar(i.codigo)}</td>
+        <td><input class="celula" data-campo="descricao" value="${escapar(i.descricao)}"></td>
+        <td class="direita"><input class="celula numero" data-campo="estoque" inputmode="numeric" value="${i.estoque}"></td>
+        <td class="direita"><input class="celula numero" data-campo="preco"
+              placeholder="—" value="${i.precoCentavos === null ? "" : (i.precoCentavos / 100).toFixed(2).replace(".", ",")}"></td>
+        <td>${i.fitmentHumano
+              ? '<span class="etiqueta ia">confirmada</span>'
+              : i.motos > 0 ? `<span class="etiqueta dado">${i.motos} auto</span>`
+                            : '<span class="etiqueta fim">nenhuma</span>'}</td>
+        <td class="direita" style="white-space:nowrap">
+          <button class="mini plano" data-acao="motos" title="Compatibilidade">Motos</button>
+          <button class="mini plano" data-acao="ativo">${i.ativo ? "Desativar" : "Reativar"}</button>
+        </td>
+      </tr>`).join("")}</tbody></table>`;
+    ligarTabelaProdutos();
+  }
+
+  const de = (p.pagina - 1) * p.porPagina + 1;
+  const ate = Math.min(p.pagina * p.porPagina, p.total);
+  $("prodContagem").textContent = p.total === 0
+    ? "nenhuma peça"
+    : `${numero(de)}–${numero(ate)} de ${numero(p.total)}`;
+  $("prodAnterior").disabled = p.pagina <= 1;
+  $("prodProxima").disabled = ate >= p.total;
+}
+
+/**
+ * Salva quando o campo perde o foco, não a cada tecla.
+ *
+ * O balcão corrige estoque com o cliente na frente: uma requisição por tecla
+ * digitada, numa internet de Altamira, seria o mesmo que não salvar nada.
+ */
+function ligarTabelaProdutos() {
+  for (const campo of $$("#tabelaProdutos .celula")) {
+    const original = campo.value;
+    campo.addEventListener("input", () => campo.classList.toggle("sujo", campo.value !== original));
+    campo.addEventListener("keydown", (e) => { if (e.key === "Enter") campo.blur(); });
+    campo.addEventListener("blur", async () => {
+      if (campo.value === original) return;
+      const id = campo.closest("tr").dataset.id;
+      const nome = campo.dataset.campo;
+
+      let corpo;
+      if (nome === "preco") {
+        const centavos = paraCentavos(campo.value);
+        if (centavos === undefined) { torrada("Preço não entendido. Use 45,90.", "erro"); campo.value = original; campo.classList.remove("sujo"); return; }
+        corpo = { precoCentavos: centavos };
+      } else if (nome === "estoque") {
+        const n = Number(String(campo.value).replace(/\D/g, ""));
+        if (!Number.isInteger(n) || n < 0) { torrada("Estoque precisa ser número inteiro.", "erro"); campo.value = original; return; }
+        corpo = { estoque: n };
+      } else {
+        corpo = { descricao: campo.value };
+      }
+
+      try {
+        await mandar("/api/produtos/" + id, "PUT", corpo);
+        campo.classList.remove("sujo");
+        anima(campo, { backgroundColor: ["rgba(55,208,138,.25)", "rgba(0,0,0,0)"], duration: 700 });
+        torrada("Salvo.", "ok");
+      } catch (e) {
+        campo.value = original;
+        campo.classList.remove("sujo");
+        torrada(e.message, "erro");
+      }
+    });
+  }
+
+  for (const b of $$("#tabelaProdutos button[data-acao]")) {
+    b.addEventListener("click", async () => {
+      const tr = b.closest("tr");
+      const id = tr.dataset.id;
+      if (b.dataset.acao === "motos") return abrirFitment(id, tr.children[1].querySelector("input").value);
+      try {
+        await mandar(`/api/produtos/${id}/ativo`, "POST", { ativo: tr.classList.contains("inativo") });
+        torrada(tr.classList.contains("inativo") ? "Peça de volta ao catálogo." : "Peça fora da busca. Dá para reativar.", "ok");
+        carregarProdutos();
+      } catch (e) { torrada(e.message, "erro"); }
+    });
+  }
+}
+
+/* ------------------------------------------------- gaveta: nova peça */
+function abrirGaveta(titulo, html) {
+  $("gavetaTitulo").textContent = titulo;
+  $("gavetaCorpo").innerHTML = html;
+  $("gaveta").hidden = false;
+  anima(".gaveta-face", { translateX: [40, 0], opacity: [0, 1], duration: 260, ease: "outExpo" });
+  $("gavetaCorpo").querySelector("input, textarea, select")?.focus();
+}
+
+function fecharGaveta() { $("gaveta").hidden = true; }
+
+$("fecharGaveta").addEventListener("click", fecharGaveta);
+$("gaveta").addEventListener("click", (e) => { if (e.target === $("gaveta")) fecharGaveta(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("gaveta").hidden) fecharGaveta(); });
+
+$("novoProduto").addEventListener("click", () => {
+  abrirGaveta("Cadastrar peça", `
+    <p class="dica">Peça cadastrada aqui entra na busca do agente na hora, e o próximo import do ERP não a apaga.</p>
+    <label><span class="rotulo">Código</span><input id="npCodigo" placeholder="4402"></label>
+    <label><span class="rotulo">Descrição</span><input id="npDescricao" placeholder="RETENTOR DIANTEIRO FAN 160"></label>
+    <div id="npPrevisao" class="tool" hidden></div>
+    <div class="linha">
+      <label><span class="rotulo">Unidade</span><input id="npUnidade" placeholder="UN"></label>
+      <label><span class="rotulo">Estoque</span><input id="npEstoque" type="number" min="0" value="0"></label>
+      <label><span class="rotulo">Preço</span><input id="npPreco" placeholder="45,90"></label>
+    </div>
+    <div class="acoes">
+      <button class="chave-acao" id="npSalvar">Cadastrar</button>
+      <button class="plano" id="npCancelar">Cancelar</button>
+    </div>`);
+
+  // Mostra como a busca vai enxergar o texto. Cadastrar peça que o cliente
+  // nunca acha é o erro que só aparece semanas depois, numa venda perdida.
+  let atrasoPrevisao;
+  $("npDescricao").addEventListener("input", () => {
+    clearTimeout(atrasoPrevisao);
+    atrasoPrevisao = setTimeout(async () => {
+      const texto = $("npDescricao").value.trim();
+      if (texto.length < 3) { $("npPrevisao").hidden = true; return; }
+      try {
+        const p = await mandar("/api/prever", "POST", { texto });
+        if (!p.expandido) { $("npPrevisao").hidden = true; return; }
+        $("npPrevisao").hidden = false;
+        $("npPrevisao").textContent = `a busca vai indexar: ${p.expandido}`;
+      } catch { $("npPrevisao").hidden = true; }
+    }, 350);
+  });
+
+  $("npCancelar").addEventListener("click", fecharGaveta);
+  $("npSalvar").addEventListener("click", async () => {
+    const centavos = paraCentavos($("npPreco").value);
+    if (centavos === undefined) return torrada("Preço não entendido. Use 45,90.", "erro");
+    try {
+      await mandar("/api/produtos", "POST", {
+        codigo: $("npCodigo").value,
+        descricao: $("npDescricao").value,
+        unidade: $("npUnidade").value,
+        estoque: Number($("npEstoque").value) || 0,
+        precoCentavos: centavos,
+      });
+      fecharGaveta();
+      torrada("Peça cadastrada.", "ok");
+      carregarProdutos();
+    } catch (e) { torrada(e.message, "erro"); }
+  });
+});
+
+/* --------------------------------------------- gaveta: compatibilidade */
+async function abrirFitment(produtoId, descricao) {
+  abrirGaveta("Compatibilidade", `
+    <p class="dica">${escapar(descricao)}</p>
+    <div class="aviso">Só o que estiver <b>confirmado</b> autoriza o agente a dizer que a peça serve. O que a extração marcou sozinha ele só usa para sugerir com ressalva.</div>
+    <div id="fitAtual" style="margin-top:14px"><span class="vazio">carregando…</span></div>
+    <label><span class="rotulo">Adicionar moto</span><input id="fitBusca" placeholder="titan, biz, falcon…"></label>
+    <div id="fitResultado"></div>`);
+
+  const recarregar = async () => {
+    const motos = await pegar(`/api/produtos/${produtoId}/motos`);
+    $("fitAtual").innerHTML = motos.length === 0
+      ? '<span class="vazio">Nenhuma moto ligada a esta peça.</span>'
+      : motos.map((m) => `<div class="item" style="cursor:default">
+          <span class="quemE"><span class="nome">${escapar(m.nome)}</span></span>
+          <span class="etiqueta ${m.origem === "humano" ? "ia" : "dado"}">${m.origem === "humano" ? "confirmada" : "auto"}</span>
+          ${m.origem === "humano"
+            ? `<button class="mini plano risco" data-tirar="${m.id}">Tirar</button>`
+            : `<button class="mini plano" data-confirmar="${m.id}">Confirmar</button>`}
+        </div>`).join("");
+
+    for (const b of $$("#fitAtual [data-confirmar]")) {
+      b.addEventListener("click", async () => {
+        await mandar(`/api/produtos/${produtoId}/motos`, "POST", { motoId: b.dataset.confirmar, confirmado: true });
+        torrada("Confirmada. O agente já pode afirmar que serve.", "ok");
+        recarregar(); carregarProdutos();
+      });
+    }
+    for (const b of $$("#fitAtual [data-tirar]")) {
+      b.addEventListener("click", async () => {
+        await mandar(`/api/produtos/${produtoId}/motos`, "POST", { motoId: b.dataset.tirar, confirmado: false });
+        torrada("Ligação removida.", "ok");
+        recarregar(); carregarProdutos();
+      });
+    }
+  };
+
+  await recarregar();
+
+  let atraso;
+  $("fitBusca").addEventListener("input", () => {
+    clearTimeout(atraso);
+    atraso = setTimeout(async () => {
+      const termo = $("fitBusca").value.trim();
+      if (termo.length < 2) { $("fitResultado").innerHTML = ""; return; }
+      const motos = await pegar("/api/motos?busca=" + encodeURIComponent(termo));
+      $("fitResultado").innerHTML = motos.map((m) => `
+        <button class="item" data-add="${m.id}">
+          <span class="quemE"><span class="nome">${escapar(m.nome)}</span>
+          <span class="tel">${escapar(m.anos ?? "")}</span></span>
+          <span class="etiqueta ia">confirmar</span>
+        </button>`).join("");
+      for (const b of $$("#fitResultado [data-add]")) {
+        b.addEventListener("click", async () => {
+          await mandar(`/api/produtos/${produtoId}/motos`, "POST", { motoId: b.dataset.add, confirmado: true });
+          $("fitBusca").value = ""; $("fitResultado").innerHTML = "";
+          torrada("Moto ligada e confirmada.", "ok");
+          recarregar(); carregarProdutos();
+        });
+      }
+    }, 300);
+  });
+}
+
+/* ===================================================================
+   Serviços
+   =================================================================== */
+async function carregarServicos() {
+  const busca = encodeURIComponent($("buscaServico").value.trim());
+  const lista = await pegar("/api/servicos?busca=" + busca);
+
+  if (lista.length === 0) {
+    $("tabelaServicos").innerHTML =
+      '<span class="vazio" style="padding:14px">Nenhum serviço cadastrado. Comece pelos três que mais saem.</span>';
+    return;
+  }
+
+  $("tabelaServicos").innerHTML = `<table>
+    <thead><tr><th>Serviço</th><th>Observação</th><th class="direita">Preço</th>
+      <th class="direita">Duração</th><th></th></tr></thead>
+    <tbody>${lista.map((s) => `<tr data-id="${s.id}" class="${s.ativo ? "" : "inativo"}">
+      <td><span class="nome">${escapar(s.nome)}</span></td>
+      <td class="dica" style="margin:0">${escapar(s.descricao ?? "")}</td>
+      <td class="direita dado">${moeda(s.precoCentavos)}</td>
+      <td class="direita dado">${s.duracaoMin ? s.duracaoMin + " min" : "—"}</td>
+      <td class="direita" style="white-space:nowrap">
+        <button class="mini plano" data-editar>Editar</button>
+        <button class="mini plano risco" data-excluir>Excluir</button>
+      </td>
+    </tr>`).join("")}</tbody></table>`;
+
+  for (const b of $$("#tabelaServicos [data-editar]")) {
+    b.addEventListener("click", () => {
+      const id = b.closest("tr").dataset.id;
+      formularioServico(lista.find((s) => s.id === id));
+    });
+  }
+  for (const b of $$("#tabelaServicos [data-excluir]")) {
+    b.addEventListener("click", async () => {
+      const tr = b.closest("tr");
+      if (!confirm("Excluir este serviço?")) return;
+      try {
+        await mandar("/api/servicos/" + tr.dataset.id, "DELETE");
+        torrada("Serviço excluído.", "ok");
+        carregarServicos();
+      } catch (e) { torrada(e.message, "erro"); }
+    });
+  }
+}
+
+function formularioServico(s) {
+  const novo = !s;
+  abrirGaveta(novo ? "Cadastrar serviço" : "Editar serviço", `
+    <label><span class="rotulo">Nome</span><input id="svNome" value="${escapar(s?.nome ?? "")}" placeholder="Troca de óleo"></label>
+    <label><span class="rotulo">Observação</span><textarea id="svDescricao" rows="2"
+      placeholder="o que está incluso, o que não está">${escapar(s?.descricao ?? "")}</textarea></label>
+    <div class="linha">
+      <label><span class="rotulo">Preço</span><input id="svPreco" placeholder="60,00"
+        value="${s?.precoCentavos != null ? (s.precoCentavos / 100).toFixed(2).replace(".", ",") : ""}"></label>
+      <label><span class="rotulo">Duração (min)</span><input id="svDuracao" type="number" min="1"
+        value="${s?.duracaoMin ?? ""}"></label>
+    </div>
+    <label class="giro" style="margin-top:16px">
+      <span class="interruptor"><input type="checkbox" id="svAtivo" ${s?.ativo !== false ? "checked" : ""}><span class="trilho"></span></span>
+      <span class="rotulo">Oferecer este serviço</span>
+    </label>
+    <div class="acoes">
+      <button class="chave-acao" id="svSalvar">${novo ? "Cadastrar" : "Salvar"}</button>
+      <button class="plano" id="svCancelar">Cancelar</button>
+    </div>`);
+
+  $("svCancelar").addEventListener("click", fecharGaveta);
+  $("svSalvar").addEventListener("click", async () => {
+    const centavos = paraCentavos($("svPreco").value);
+    if (centavos === undefined) return torrada("Preço não entendido. Use 60,00.", "erro");
+    const duracao = $("svDuracao").value.trim() === "" ? null : Number($("svDuracao").value);
+    const corpo = {
+      nome: $("svNome").value,
+      descricao: $("svDescricao").value,
+      precoCentavos: centavos,
+      duracaoMin: duracao,
+      ativo: $("svAtivo").checked,
+    };
+    try {
+      await mandar(novo ? "/api/servicos" : "/api/servicos/" + s.id, novo ? "POST" : "PUT", corpo);
+      fecharGaveta();
+      torrada(novo ? "Serviço cadastrado." : "Serviço salvo.", "ok");
+      carregarServicos();
+    } catch (e) { torrada(e.message, "erro"); }
+  });
+}
+
+$("novoServico").addEventListener("click", () => formularioServico(null));
+
+/* ===================================================================
+   Agente
+   =================================================================== */
+async function carregarAgente() {
+  cfg = await pegar("/api/config");
+  padraoDoSistema = cfg.promptPadrao;
+  $("prompt").value = cfg.promptCustomizado ?? cfg.promptPadrao;
+
+  $("modelos").innerHTML = cfg.modelos.map((m) => `
+    <button class="item" data-modelo="${escapar(m.id)}" aria-current="${m.id === cfg.modeloConversa}">
+      <span class="quemE">
+        <span class="nome">${escapar(m.nome)}</span>
+        <span class="tel" style="font-family:Barlow,sans-serif">${escapar(m.resumo)}</span>
+      </span>
+      ${m.id === cfg.modeloConversa ? '<span class="etiqueta ia">no ar</span>' : '<span class="etiqueta fim">usar</span>'}
+    </button>`).join("");
+
+  for (const b of $$("#modelos [data-modelo]")) {
+    b.addEventListener("click", () => {
+      for (const o of $$("#modelos [data-modelo]")) o.setAttribute("aria-current", String(o === b));
+      recado($("recadoPublicar"), "Modelo escolhido. Publique para valer no atendimento.", "ok");
+    });
+  }
+
+  await carregarVersoes();
+}
+
+const modeloEscolhido = () =>
+  $$("#modelos [data-modelo]").find((b) => b.getAttribute("aria-current") === "true")?.dataset.modelo
+  ?? cfg?.modeloConversa;
+
+async function publicar() {
+  $("publicar").disabled = true;
+  try {
+    const texto = $("prompt").value;
+    const r = await mandar("/api/config", "PUT", {
+      modeloConversa: modeloEscolhido(),
+      // Igual ao padrão significa "não customizei": grava null para o texto
+      // continuar acompanhando as melhorias do sistema.
+      promptCustomizado: texto.trim() === padraoDoSistema.trim() ? null : texto,
+      nota: $("notaVersao").value,
+    });
+    $("notaVersao").value = "";
+    torrada(r.versao ? `Versão ${r.versao} no ar. Vale na próxima conversa.` : "Nada mudou — nenhuma versão nova.", "ok");
+    await carregarAgente();
+    atualizarLuzes();
+  } catch (e) {
+    recado($("recadoPublicar"), e.message, "erro");
+  } finally {
+    $("publicar").disabled = false;
+  }
+}
+
+async function carregarVersoes() {
+  const lista = await pegar("/api/versoes");
+  const el = $("listaVersoes");
+
+  if (lista.length === 0) {
+    el.innerHTML = '<span class="vazio">Nenhuma versão publicada ainda. A primeira nasce quando você publicar uma mudança de modelo ou de instruções.</span>';
+    return;
+  }
+
+  el.innerHTML = lista.map((v) => `
+    <div class="item" style="cursor:default">
+      <span class="quemE">
+        <span class="nome">v${v.numero} · ${escapar(v.modelo)}</span>
+        <span class="tel" style="font-family:Barlow,sans-serif">${escapar(v.nota ?? (v.prompt ? "instruções próprias" : "instruções padrão"))}</span>
+      </span>
+      ${v.emUso ? '<span class="etiqueta ia">no ar</span>' : ""}
+      <span class="quando">${quandoLongo(v.publicadaEm)}</span>
+      <button class="mini plano" data-diff="${v.numero}">Ver mudança</button>
+      ${v.emUso ? "" : `<button class="mini plano" data-restaurar="${v.numero}">Restaurar</button>`}
+    </div>`).join("");
+
+  for (const b of $$("#listaVersoes [data-diff]")) {
+    b.addEventListener("click", async () => {
+      const d = await pegar(`/api/versoes/${b.dataset.diff}/diff`);
+      const corpo = d.linhas.map((l) => {
+        const classe = l.sinal === "+" ? "mais" : l.sinal === "-" ? "menos" : "igual";
+        return `<span class="${classe}">${escapar(l.sinal + " " + l.texto)}</span>`;
+      }).join("\n");
+      abrirGaveta(`v${b.dataset.diff} comparada com o que está no ar`, `
+        <p class="dica"><span class="mono" style="color:var(--vermelho)">−</span> saiu na versão de agora ·
+           <span class="mono" style="color:var(--verde)">+</span> entrou.</p>
+        <div class="diff">${corpo}</div>`);
+    });
+  }
+
+  for (const b of $$("#listaVersoes [data-restaurar]")) {
+    b.addEventListener("click", async () => {
+      if (!confirm(`Voltar o agente para a versão ${b.dataset.restaurar}? Vale na próxima conversa.`)) return;
+      try {
+        await mandar("/api/versoes/restaurar", "POST", { numero: Number(b.dataset.restaurar) });
+        torrada(`Versão ${b.dataset.restaurar} restaurada.`, "ok");
+        await carregarAgente();
+      } catch (e) { torrada(e.message, "erro"); }
+    });
+  }
+}
+
+function desenharTeste() {
+  const el = $("conversaTeste");
+  if (historicoTeste.length === 0) {
+    el.innerHTML = '<span class="vazio">Nenhuma mensagem ainda.</span>';
+    return;
+  }
+  el.innerHTML = historicoTeste.map((h) =>
+    h.tipo === "tool"
+      ? `<div class="tool">· ${escapar(h.texto)}</div>`
+      : `<div class="balao ${h.tipo}"><div class="quem">${h.tipo}</div><div class="txt">${escapar(h.texto)}</div></div>`
+  ).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function testar() {
+  const msg = $("teste").value.trim();
+  if (msg === "") return;
+  $("enviarTeste").disabled = true;
+  historicoTeste.push({ tipo: "cliente", texto: msg });
+  desenharTeste();
+  $("teste").value = "";
+
+  try {
+    const t = await mandar("/api/testar", "POST", {
+      mensagem: msg,
+      prompt: $("prompt").value,
+      modelo: modeloEscolhido(),
+      historico: historicoTeste.filter((h) => h.tipo !== "tool")
+        .map((h) => ({ papel: h.tipo, conteudo: h.texto })),
+    });
+    for (const f of t.ferramentas ?? []) historicoTeste.push({ tipo: "tool", texto: f });
+    historicoTeste.push({ tipo: "agente", texto: t.texto });
+    if (t.handoff) historicoTeste.push({ tipo: "tool", texto: `HANDOFF (${t.handoff.motivo}): ${t.handoff.resumo}` });
+    desenharTeste();
+    recado($("recadoTeste"), `${t.modelo} · ${numero(t.tokensIn)} tokens de entrada · ${numero(t.tokensOut)} de saída`);
+  } catch (e) {
+    recado($("recadoTeste"), e.message, "erro");
+  } finally {
+    $("enviarTeste").disabled = false;
+  }
+}
+
+/* ===================================================================
+   WhatsApp
+   =================================================================== */
+async function conferirZap() {
+  const z = await pegar("/api/whatsapp");
+
+  const titulo = {
+    conectado: "WhatsApp conectado",
+    conectando: "Esperando a leitura do QR",
+    desconectado: "WhatsApp caiu",
+    sem_instancia: z.configurado ? "Nenhum número pareado" : "Evolution não configurado",
+  }[z.estado];
+
+  $("tituloZap").textContent = titulo;
+  $("subZap").textContent = z.erro
+    ?? (z.estado === "conectado"
+        ? "As mensagens do cliente estão chegando no gateway."
+        : "Enquanto estiver assim, nenhuma mensagem entra nem sai.");
+
+  $("mostradoresZap").innerHTML = [
+    ["número", z.numero ? "+" + z.numero : "—"],
+    ["perfil", z.nomePerfil ?? "—"],
+    ["instância", z.instancia],
+    ["estado", z.estado.replace("_", " ")],
+  ].map(([r, v]) => `<div class="mostrador ${r === "estado" && z.estado !== "conectado" ? "perigo" : ""}">
+      <div class="num pequeno mono" style="font-size:16px">${escapar(v)}</div>
+      <span class="rotulo">${r}</span>
+    </div>`).join("");
+
+  $("desconectarZap").disabled = z.estado !== "conectado";
+  $("parear").textContent = z.estado === "conectado" ? "Trocar número" : "Conectar agora";
+
+  if (z.estado === "conectado") pararQr();
+  return z;
+}
+
+let segundosQr = 0;
+
+async function pedirQr() {
+  const p = await mandar("/api/whatsapp/qr", "POST");
+  if (p.erro) { torrada(p.erro, "erro"); return; }
+  if (!p.qr && !p.codigo) { torrada("O Evolution não devolveu QR.", "erro"); return; }
+
+  $("areaQr").hidden = false;
+  if (p.qr) {
+    $("imgQr").src = p.qr;
+    anima($("imgQr"), { opacity: [0.3, 1], duration: 300 });
+  }
+  $("areaCodigo").hidden = !p.codigo;
+  if (p.codigo) $("codigoPar").textContent = p.codigo;
+
+  // O QR do WhatsApp morre em torno de 40 segundos. Em vez de deixar o dono
+  // apontar a câmera para um código vencido, a tela conta e busca outro.
+  segundosQr = 38;
+  clearInterval(recargaQr);
+  recargaQr = setInterval(async () => {
+    segundosQr -= 1;
+    $("contagemQr").textContent = `código novo em ${segundosQr}s`;
+    if (segundosQr <= 0) {
+      const z = await conferirZap();
+      if (z.estado === "conectado") {
+        torrada("WhatsApp conectado.", "ok");
+        return;
+      }
+      pedirQr();
+    }
+  }, 1000);
+}
+
+function pararQr() {
+  clearInterval(recargaQr);
+  $("areaQr").hidden = true;
+  $("contagemQr").textContent = "";
+}
+
+$("conferirZap").addEventListener("click", () =>
+  conferirZap().then(() => torrada("Conferido.", "ok")).catch((e) => torrada(e.message, "erro")));
+
+$("parear").addEventListener("click", () => pedirQr().catch((e) => torrada(e.message, "erro")));
+
+$("reiniciarZap").addEventListener("click", async () => {
+  try {
+    await mandar("/api/whatsapp/reiniciar", "POST");
+    torrada("Reiniciando. Confira em alguns segundos.", "ok");
+    setTimeout(() => conferirZap().then(atualizarLuzes), 4000);
+  } catch (e) { torrada(e.message, "erro"); }
+});
+
+$("desconectarZap").addEventListener("click", async () => {
+  if (!confirm("Desconectar o número atual? Nenhuma mensagem entra nem sai até parear de novo.")) return;
+  try {
+    await mandar("/api/whatsapp/desconectar", "POST");
+    torrada("Número desconectado. Leia um QR novo para conectar outro.", "ok");
+    await conferirZap();
+    atualizarLuzes();
+  } catch (e) { torrada(e.message, "erro"); }
+});
+
+/* ===================================================================
+   Ajustes
+   =================================================================== */
+async function carregarAjustes() {
+  cfg = await pegar("/api/config");
+  $("botAtivo").checked = cfg.botAtivo;
+  $("horario").value = cfg.horario;
+  $("endereco").value = cfg.endereco;
+  $("teto").value = cfg.tetoContatosNovosHora;
+  $("maxMsg").value = cfg.maxMensagensConversa;
+  pintarEstadoBot();
 }
 
 function pintarEstadoBot() {
@@ -446,105 +2117,75 @@ function pintarEstadoBot() {
   $("estadoBot").className = "estado " + (ligado ? "ligado" : "desligado");
 }
 
-async function carregar() {
-  const r = await api("/api/config");
-  const c = await r.json();
-  $("botAtivo").checked = c.botAtivo;
-  $("horario").value = c.horario;
-  $("endereco").value = c.endereco;
-  $("teto").value = c.tetoContatosNovosHora;
-  $("maxMsg").value = c.maxMensagensConversa;
-  padraoDoSistema = c.promptPadrao;
-  $("prompt").value = c.promptCustomizado ?? c.promptPadrao;
-  pintarEstadoBot();
-
-  const m = await (await api("/api/metricas")).json();
-  $("metricas").innerHTML = [
-    ["produtos", m.produtos], ["com compatibilidade", m.comFitment],
-    ["motos", m.motos], ["demandas 30d", m.demandas],
-  ].map(([r, n]) => `<div class="metrica"><div class="n">${n}</div><div class="r">${r}</div></div>`).join("");
-}
-
-async function salvar() {
-  $("salvar").disabled = true;
+async function salvarAjustes() {
+  $("salvarAjustes").disabled = true;
   try {
-    const corpo = {
+    await mandar("/api/config", "PUT", {
       botAtivo: $("botAtivo").checked,
       horario: $("horario").value,
       endereco: $("endereco").value,
       tetoContatosNovosHora: Number($("teto").value),
       maxMensagensConversa: Number($("maxMsg").value),
-      // Igual ao padrão significa "não customizei": grava null para o texto
-      // continuar acompanhando as melhorias do sistema.
-      promptCustomizado: $("prompt").value.trim() === padraoDoSistema.trim() ? null : $("prompt").value,
-    };
-    const r = await api("/api/config", {
-      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo),
     });
-    if (!r.ok) throw new Error(await r.text());
-    recado($("recadoSalvar"), "Salvo. Vale em até um minuto.", "ok");
+    torrada("Salvo. Vale em até um minuto.", "ok");
+    atualizarLuzes();
   } catch (e) {
-    recado($("recadoSalvar"), "Não salvou: " + e.message, "erro");
+    recado($("recadoAjustes"), e.message, "erro");
   } finally {
-    $("salvar").disabled = false;
+    $("salvarAjustes").disabled = false;
   }
 }
 
-function desenharConversa() {
-  const el = $("conversa");
-  if (historico.length === 0) {
-    el.innerHTML = '<span class="vazio">Nenhuma mensagem ainda.</span>';
-    return;
-  }
-  el.innerHTML = historico.map((h) => {
-    if (h.tipo === "tool") return `<div class="tool">· ${h.texto}</div>`;
-    return `<div class="balao ${h.tipo}"><div class="quem">${h.tipo}</div><div class="txt">${
-      h.texto.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))
-    }</div></div>`;
-  }).join("");
-  el.scrollTop = el.scrollHeight;
+/* ===================================================================
+   Ligações
+   =================================================================== */
+for (const aba of $$(".aba")) aba.addEventListener("click", () => irPara(aba.dataset.aba));
+for (const luz of $$(".luz")) luz.addEventListener("click", () => irPara(luz.dataset.ir));
+
+for (const b of $$(".filtro")) {
+  b.addEventListener("click", () => {
+    filtroConversa = b.dataset.filtro;
+    for (const o of $$(".filtro")) o.setAttribute("aria-pressed", String(o === b));
+    desenharConversas();
+  });
 }
 
-async function testar() {
-  const msg = $("teste").value.trim();
-  if (msg === "") return;
-  $("enviarTeste").disabled = true;
-  historico.push({ tipo: "cliente", texto: msg });
-  desenharConversa();
-  $("teste").value = "";
-
-  try {
-    const r = await api("/api/testar", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mensagem: msg,
-        prompt: $("prompt").value,
-        historico: historico.filter((h) => h.tipo !== "tool").map((h) => ({ papel: h.tipo, conteudo: h.texto })),
-      }),
-    });
-    const t = await r.json();
-    if (!r.ok) throw new Error(t.erro ?? "falhou");
-    for (const f of t.ferramentas ?? []) historico.push({ tipo: "tool", texto: f });
-    historico.push({ tipo: "agente", texto: t.texto });
-    if (t.handoff) historico.push({ tipo: "tool", texto: `HANDOFF (${t.handoff.motivo}): ${t.handoff.resumo}` });
-    desenharConversa();
-    recado($("recadoTeste"), `${t.tokensIn} tokens de entrada · ${t.tokensOut} de saída`);
-  } catch (e) {
-    recado($("recadoTeste"), "Falhou: " + e.message, "erro");
-  } finally {
-    $("enviarTeste").disabled = false;
-  }
+for (const b of $$(".filtroProd")) {
+  b.addEventListener("click", () => {
+    filtroProduto = b.dataset.filtro;
+    paginaProduto = 1;
+    for (const o of $$(".filtroProd")) o.setAttribute("aria-pressed", String(o === b));
+    carregarProdutos().catch((e) => torrada(e.message, "erro"));
+  });
 }
 
-$("botAtivo").addEventListener("change", pintarEstadoBot);
-$("salvar").addEventListener("click", salvar);
+let atrasoBusca;
+const buscarDepois = (fn) => () => { clearTimeout(atrasoBusca); atrasoBusca = setTimeout(fn, 280); };
+
+$("buscaConversa").addEventListener("input", buscarDepois(() => carregarConversas()));
+$("atualizarConversas").addEventListener("click", () => carregarConversas());
+$("iaConversa").addEventListener("change", alternarIa);
+$("enviarManual").addEventListener("click", enviarManual);
+$("respostaManual").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) enviarManual();
+});
+
+$("buscaProduto").addEventListener("input", buscarDepois(() => { paginaProduto = 1; carregarProdutos(); }));
+$("prodAnterior").addEventListener("click", () => { paginaProduto = Math.max(1, paginaProduto - 1); carregarProdutos(); });
+$("prodProxima").addEventListener("click", () => { paginaProduto += 1; carregarProdutos(); });
+$("buscaServico").addEventListener("input", buscarDepois(() => carregarServicos()));
+
+$("publicar").addEventListener("click", publicar);
+$("restaurarPadrao").addEventListener("click", () => {
+  $("prompt").value = padraoDoSistema;
+  recado($("recadoPublicar"), "Texto padrão recarregado. Publique para valer.", "ok");
+});
 $("enviarTeste").addEventListener("click", testar);
 $("teste").addEventListener("keydown", (e) => { if (e.key === "Enter") testar(); });
-$("limparTeste").addEventListener("click", () => { historico = []; desenharConversa(); });
-$("restaurar").addEventListener("click", () => {
-  $("prompt").value = padraoDoSistema;
-  recado($("recadoPrompt"), "Texto padrão recarregado — salve para valer.", "ok");
-});
+$("limparTeste").addEventListener("click", () => { historicoTeste = []; desenharTeste(); });
+
+$("botAtivo").addEventListener("change", pintarEstadoBot);
+$("salvarAjustes").addEventListener("click", salvarAjustes);
 
 // Senha de painel se digita errado com facilidade — ainda mais uma gerada,
 // cheia de zero que parece "o". O olhinho evita a terceira tentativa.
@@ -562,17 +2203,11 @@ $("verSenha").addEventListener("click", () => {
 $("entrar").addEventListener("click", entrar);
 $("senha").addEventListener("keydown", (e) => { if (e.key === "Enter") entrar(); });
 $("sair").addEventListener("click", sair);
-$("atualizar").addEventListener("click", carregarConversas);
-$("buscaConversa").addEventListener("input", carregarConversas);
-$("iaConversa").addEventListener("change", alternarIa);
 
-for (const aba of document.querySelectorAll(".aba")) {
-  aba.addEventListener("click", () => {
-    for (const o of document.querySelectorAll(".aba")) o.classList.toggle("ativa", o === aba);
-    $("abaConversas").hidden = aba.dataset.aba !== "conversas";
-    $("abaConfig").hidden = aba.dataset.aba !== "config";
-  });
-}
+window.addEventListener("hashchange", () => {
+  const alvo = location.hash.slice(1);
+  if (alvo && alvo !== paginaAtual) irPara(alvo);
+});
 
 // Quem já tem cookie válido não vê a tela de login.
 fetch("/api/sessao")

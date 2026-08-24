@@ -12,7 +12,7 @@ import {
 } from "../conversa/historico.js";
 import { lerConfig, promptEfetivo } from "../config/loja.js";
 import { montarContexto } from "../agente/prompt.js";
-import { responder, MODELO_CONVERSA, type Fala, type Imagem } from "../agente/laco.js";
+import { responder, type Fala, type Imagem } from "../agente/laco.js";
 import { executarFerramenta } from "../ferramentas/executar.js";
 import { enviar, type ConfigEvolution } from "../saida/evolution.js";
 import { avaliar } from "./guardas.js";
@@ -213,6 +213,9 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
         {
           anthropic: deps.anthropic,
           prompt: promptEfetivo(cfg),
+          // O modelo vem da config para a troca no painel valer no minuto
+          // seguinte, sem deploy.
+          modelo: cfg.modeloConversa,
           contexto: montarContexto({
             agora: new Date(),
             nome: dados.nome,
@@ -238,7 +241,7 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
         conteudo: turno.texto,
         tokensIn: turno.tokensIn,
         tokensOut: turno.tokensOut,
-        modelo: MODELO_CONVERSA,
+        modelo: turno.modelo,
       });
 
       await enviar(deps.pool, deps.evolution, dados.telefone, turno.texto);

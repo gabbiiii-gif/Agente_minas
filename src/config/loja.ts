@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { montarPrompt } from "../agente/prompt.js";
+import { MODELO_CONVERSA } from "../agente/laco.js";
 
 /**
  * Configuração que o dono muda sem mexer em código nem fazer deploy.
@@ -17,6 +18,8 @@ export interface ConfigLoja {
   maxMensagensConversa: number;
   /** null = usa o prompt padrão do código; texto = o dono editou no painel. */
   promptCustomizado: string | null;
+  /** Modelo da API que responde ao cliente. Trocável pelo painel. */
+  modeloConversa: string;
 }
 
 const PADRAO: ConfigLoja = {
@@ -26,7 +29,38 @@ const PADRAO: ConfigLoja = {
   tetoContatosNovosHora: 12,
   maxMensagensConversa: 30,
   promptCustomizado: null,
+  modeloConversa: MODELO_CONVERSA,
 };
+
+/**
+ * Modelos que o painel oferece.
+ *
+ * Lista fechada de propósito: o campo grava direto no que vai para a API, e
+ * um nome errado só apareceria como erro na cara do cliente, na primeira
+ * mensagem depois de salvar. A troca é o controle de versão do agente — mais
+ * capaz custa mais e demora mais, e é o dono quem decide a troca.
+ */
+export const MODELOS_DISPONIVEIS = [
+  {
+    id: "claude-opus-5",
+    nome: "Opus 5",
+    resumo: "O mais capaz. Erra menos em conversa difícil e custa mais por mensagem.",
+  },
+  {
+    id: "claude-sonnet-5",
+    nome: "Sonnet 5",
+    resumo: "O equilíbrio. É o que atende hoje.",
+  },
+  {
+    id: "claude-haiku-4-5-20251001",
+    nome: "Haiku 4.5",
+    resumo: "O mais rápido e barato. Bom para volume alto de pergunta simples.",
+  },
+] as const;
+
+export function modeloConhecido(id: string): boolean {
+  return MODELOS_DISPONIVEIS.some((m) => m.id === id);
+}
 
 const VALIDADE_CACHE_MS = 60_000;
 
@@ -40,6 +74,7 @@ const CHAVES: Record<keyof ConfigLoja, string> = {
   tetoContatosNovosHora: "teto_contatos_novos_hora",
   maxMensagensConversa: "max_mensagens_conversa",
   promptCustomizado: "prompt_sistema",
+  modeloConversa: "modelo_conversa",
 };
 
 export async function lerConfig(pool: Pool, usarCache = true): Promise<ConfigLoja> {
@@ -64,6 +99,7 @@ export async function lerConfig(pool: Pool, usarCache = true): Promise<ConfigLoj
     tetoContatosNovosHora: pegar(CHAVES.tetoContatosNovosHora, PADRAO.tetoContatosNovosHora),
     maxMensagensConversa: pegar(CHAVES.maxMensagensConversa, PADRAO.maxMensagensConversa),
     promptCustomizado: pegar<string | null>(CHAVES.promptCustomizado, null),
+    modeloConversa: pegar(CHAVES.modeloConversa, PADRAO.modeloConversa),
   };
 
   cache = { valor, em: Date.now() };

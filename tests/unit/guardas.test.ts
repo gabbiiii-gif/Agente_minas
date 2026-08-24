@@ -14,6 +14,7 @@ const CFG: ConfigLoja = {
   tetoContatosNovosHora: 12,
   maxMensagensConversa: 30,
   promptCustomizado: null,
+  modeloConversa: "claude-sonnet-5",
 };
 
 const CONTATO: Contato = {

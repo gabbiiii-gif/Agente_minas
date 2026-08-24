@@ -6,11 +6,16 @@ import {
   gravarConfig,
   promptPadrao,
   promptEfetivo,
+  modeloConhecido,
+  MODELOS_DISPONIVEIS,
   type ConfigLoja,
 } from "../config/loja.js";
+import { publicarVersao, registrar } from "./versoes.js";
 import { montarContexto } from "../agente/prompt.js";
 import { responder, type Fala } from "../agente/laco.js";
 import { executarFerramenta } from "../ferramentas/executar.js";
+import { enviar } from "../saida/evolution.js";
+import { gravarMensagem } from "../conversa/historico.js";
 
 /**
  * O que o painel faz, separado de como ele é servido.
@@ -49,14 +54,14 @@ export function obterAnthropic(): Anthropic {
 
 export async function acaoLerConfig(pool: Pool) {
   const cfg = await lerConfig(pool, false);
-  return { ...cfg, promptPadrao: promptPadrao(cfg) };
+  return { ...cfg, promptPadrao: promptPadrao(cfg), modelos: MODELOS_DISPONIVEIS };
 }
 
 /** Valida antes de gravar: o painel não pode salvar algo que derrube o agente. */
 export async function acaoGravarConfig(
   pool: Pool,
-  c: Partial<ConfigLoja>,
-): Promise<{ ok: true } | { erro: string }> {
+  c: Partial<ConfigLoja> & { nota?: string },
+): Promise<{ ok: true; versao?: number } | { erro: string }> {
   if (c.tetoContatosNovosHora !== undefined && !(c.tetoContatosNovosHora > 0)) {
     return { erro: "teto de contatos novos precisa ser maior que zero" };
   }
@@ -70,8 +75,32 @@ export async function acaoGravarConfig(
   ) {
     return { erro: "instruções curtas demais — se quer voltar ao padrão, use o botão Restaurar" };
   }
-  await gravarConfig(pool, c);
-  return { ok: true };
+  // Lista fechada: o valor vai direto para o campo `model` da API, e um nome
+  // errado só apareceria como erro na cara do cliente.
+  if (c.modeloConversa !== undefined && !modeloConhecido(c.modeloConversa)) {
+    return { erro: `modelo desconhecido: ${c.modeloConversa}` };
+  }
+
+  const antes = await lerConfig(pool, false);
+  const { nota, ...campos } = c;
+  await gravarConfig(pool, campos);
+
+  if (campos.botAtivo !== undefined && campos.botAtivo !== antes.botAtivo) {
+    await registrar(pool, campos.botAtivo ? "ligar_bot" : "desligar_bot");
+  }
+
+  // Só mexer no que define o comportamento cria versão. Trocar o endereço da
+  // loja não é uma versão nova do agente, e numerar isso encheria o histórico
+  // de linhas que ninguém vai querer restaurar.
+  const mudouComportamento =
+    (campos.modeloConversa !== undefined && campos.modeloConversa !== antes.modeloConversa) ||
+    (campos.promptCustomizado !== undefined && campos.promptCustomizado !== antes.promptCustomizado);
+
+  if (!mudouComportamento) return { ok: true };
+
+  const depois = await lerConfig(pool, false);
+  const versao = await publicarVersao(pool, depois, nota ?? null);
+  return { ok: true, versao: versao.numero };
 }
 
 /** Uma linha da lista de conversas. */
@@ -213,19 +242,201 @@ export async function acaoAlternarIa(
       [rows[0].contato_id],
     );
   }
+  await registrar(pool, iaAtiva ? "religar_ia" : "assumir_conversa", { conversaId: id });
   return { ok: true };
 }
 
+/**
+ * Responde ao cliente pelo painel, como balcão.
+ *
+ * Antes disto, assumir uma conversa significava largar o painel e procurar o
+ * contato no WhatsApp do celular — e o que foi respondido lá não voltava para
+ * o histórico. Aqui a resposta sai pelo mesmo número e fica gravada como
+ * `humano`, então a próxima pessoa que abrir a conversa vê o que já foi dito.
+ *
+ * Mandar uma mensagem daqui cala o agente na conversa: dois atendentes
+ * respondendo o mesmo cliente é pior do que nenhum.
+ */
+export async function acaoResponderManual(
+  pool: Pool,
+  id: string,
+  texto: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const conteudo = String(texto ?? "").trim();
+  if (conteudo === "") return { erro: "mensagem vazia" };
+  if (conteudo.length > 4000) return { erro: "mensagem longa demais" };
+
+  const url = process.env.EVOLUTION_URL?.trim();
+  const apiKey = process.env.EVOLUTION_API_KEY?.trim();
+  if (!url || !apiKey) {
+    return { erro: "EVOLUTION_URL e EVOLUTION_API_KEY não estão configuradas neste ambiente" };
+  }
+
+  const { rows } = await pool.query<{ contato_id: string; telefone: string }>(
+    `select c.contato_id, ct.telefone
+       from agente.conversas c
+       join agente.contatos ct on ct.id = c.contato_id
+      where c.id = $1`,
+    [id],
+  );
+  const alvo = rows[0];
+  if (!alvo) return { erro: "conversa não encontrada" };
+
+  try {
+    await enviar(
+      pool,
+      { url, apiKey, instancia: process.env.EVOLUTION_INSTANCIA?.trim() || "minas" },
+      alvo.telefone,
+      conteudo,
+    );
+  } catch (erro) {
+    return { erro: `não saiu: ${(erro as Error).message}` };
+  }
+
+  await gravarMensagem(pool, { conversaId: id, papel: "humano", conteudo });
+  // Quem respondeu assumiu. Sem isto o agente responderia por cima na
+  // mensagem seguinte do cliente.
+  await pool.query(
+    "update agente.conversas set status = 'aguardando_humano' where id = $1 and status = 'ativa'",
+    [id],
+  );
+  await pool.query(
+    "update agente.contatos set silenciado_ate = now() + interval '6 hours' where id = $1",
+    [alvo.contato_id],
+  );
+  await registrar(pool, "responder_manual", { conversaId: id });
+  return { ok: true };
+}
+
+/**
+ * Os números da tela inicial.
+ *
+ * Numa consulta só, e não uma por número: cada round-trip para o Supabase
+ * custa uns 80 ms de latência da rede residencial, e catorze deles em série
+ * deixavam a tela inicial visivelmente lenta.
+ *
+ * "Hoje" é o dia em Belém, não em UTC: o dono abre isto às 8h da manhã e o
+ * número precisa bater com o que ele viu no balcão ontem.
+ */
 export async function acaoMetricas(pool: Pool) {
-  const um = async (sql: string) => Number((await pool.query<{ n: string }>(sql)).rows[0]!.n);
+  const { rows } = await pool.query(`
+    select
+      (select count(*) from agente.produtos where ativo)                             as produtos,
+      (select count(*) from agente.produtos where ativo and preco_centavos is not null) as com_preco,
+      (select count(distinct produto_id) from agente.produto_moto)                   as com_fitment,
+      (select count(*) from agente.motos)                                            as motos,
+      (select count(*) from agente.servicos where ativo)                             as servicos,
+      (select count(*) from agente.demanda_nao_atendida
+        where criado_em > now() - interval '30 days')                                as demandas,
+      (select count(*) from agente.conversas
+        where iniciada_em >= date_trunc('day', now() at time zone 'America/Belem')
+                             at time zone 'America/Belem')                           as conversas_hoje,
+      (select count(*) from agente.mensagens
+        where criado_em >= date_trunc('day', now() at time zone 'America/Belem')
+                            at time zone 'America/Belem')                            as mensagens_hoje,
+      (select count(*) from agente.conversas where status = 'aguardando_humano')     as aguardando,
+      (select count(*) from agente.conversas where status = 'ativa')                 as ativas,
+      (select count(*) from agente.conversas
+        where desfecho = 'qualificou' and iniciada_em > now() - interval '7 days')   as qualificadas_7d,
+      (select count(*) from agente.conversas
+        where iniciada_em > now() - interval '7 days')                               as conversas_7d,
+      (select coalesce(sum(tokens_in), 0) from agente.mensagens
+        where criado_em > now() - interval '24 hours')                               as tokens_in_24h,
+      (select coalesce(sum(tokens_out), 0) from agente.mensagens
+        where criado_em > now() - interval '24 hours')                               as tokens_out_24h,
+      (select count(*) from agente.saidas_pendentes)                                 as saidas_presas
+  `);
+
+  // Volume por hora das últimas 24. A série existe para a tela mostrar em que
+  // horário o cliente escreve — é o que diz se vale ligar o agente à noite.
+  const { rows: porHora } = await pool.query<{ h: string; n: string }>(`
+    select to_char(date_trunc('hour', criado_em at time zone 'America/Belem'), 'HH24') as h,
+           count(*)::text as n
+      from agente.mensagens
+     where criado_em > now() - interval '24 hours'
+     group by 1
+  `);
+  const mapaHoras = new Map(porHora.map((p) => [Number(p.h), Number(p.n)]));
+  const horaAgora = Number(
+    new Date().toLocaleString("en-US", { timeZone: "America/Belem", hour: "2-digit", hour12: false }),
+  );
+  const serie24h = Array.from({ length: 24 }, (_, i) => {
+    const hora = (horaAgora - 23 + i + 48) % 24;
+    return { hora, mensagens: mapaHoras.get(hora) ?? 0 };
+  });
+
+  const r = rows[0]!;
+  const n = (v: unknown) => Number(v ?? 0);
+
   return {
-    produtos: await um("select count(*)::text as n from agente.produtos where ativo"),
-    comFitment: await um("select count(distinct produto_id)::text as n from agente.produto_moto"),
-    motos: await um("select count(*)::text as n from agente.motos"),
-    demandas: await um(
-      "select count(*)::text as n from agente.demanda_nao_atendida where criado_em > now() - interval '30 days'",
-    ),
+    serie24h,
+    produtos: n(r.produtos),
+    comPreco: n(r.com_preco),
+    comFitment: n(r.com_fitment),
+    motos: n(r.motos),
+    servicos: n(r.servicos),
+    demandas: n(r.demandas),
+    conversasHoje: n(r.conversas_hoje),
+    mensagensHoje: n(r.mensagens_hoje),
+    aguardando: n(r.aguardando),
+    ativas: n(r.ativas),
+    qualificadas7d: n(r.qualificadas_7d),
+    conversas7d: n(r.conversas_7d),
+    tokensIn24h: n(r.tokens_in_24h),
+    tokensOut24h: n(r.tokens_out_24h),
+    saidasPresas: n(r.saidas_presas),
   };
+}
+
+/**
+ * O que o cliente pediu e a loja não tinha, agrupado.
+ *
+ * Vira lista de compra. Uma linha por pedido não serve de nada — o que
+ * interessa é a peça que dez pessoas pediram no mês, e isso só aparece
+ * quando se agrupa pelo texto normalizado.
+ */
+export async function acaoDemandas(pool: Pool, dias = 30) {
+  const { rows } = await pool.query(
+    `select coalesce(peca_norm, texto_bruto) as peca,
+            count(*)                          as pedidos,
+            max(criado_em)                    as ultimo,
+            array_agg(distinct motivo)        as motivos
+       from agente.demanda_nao_atendida
+      where criado_em > now() - ($1 || ' days')::interval
+      group by 1
+      order by pedidos desc, ultimo desc
+      limit 40`,
+    [String(dias)],
+  );
+
+  return rows.map((r) => ({
+    peca: r.peca,
+    pedidos: Number(r.pedidos),
+    ultimo: r.ultimo,
+    motivos: r.motivos as string[],
+  }));
+}
+
+/**
+ * As mensagens que não saíram.
+ *
+ * `saidas_pendentes` só enche quando o Evolution esteve fora do ar. Uma linha
+ * aqui é cliente esperando resposta que nunca chegou — por isso o número vai
+ * para a tela inicial e a lista fica a um clique.
+ */
+export async function acaoSaidasPresas(pool: Pool) {
+  const { rows } = await pool.query(
+    `select id, telefone, conteudo, tentativas, erro, criado_em
+       from agente.saidas_pendentes order by criado_em asc limit 50`,
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    telefone: r.telefone,
+    conteudo: r.conteudo,
+    tentativas: Number(r.tentativas),
+    erro: r.erro,
+    criadoEm: r.criado_em,
+  }));
 }
 
 /**
@@ -235,10 +446,13 @@ export async function acaoMetricas(pool: Pool) {
 export async function acaoTestar(
   pool: Pool,
   anthropic: Anthropic,
-  corpo: { mensagem?: string; prompt?: string; historico?: Fala[] },
+  corpo: { mensagem?: string; prompt?: string; historico?: Fala[]; modelo?: string },
 ) {
   const mensagem = String(corpo.mensagem ?? "").trim();
   if (mensagem === "") return { erro: "mensagem vazia" };
+  if (corpo.modelo !== undefined && !modeloConhecido(corpo.modelo)) {
+    return { erro: `modelo desconhecido: ${corpo.modelo}` };
+  }
 
   const cfg = await lerConfig(pool, false);
   // Sem texto na tela, testa o que está valendo de verdade para o cliente
@@ -255,6 +469,9 @@ export async function acaoTestar(
     {
       anthropic,
       prompt,
+      // Testar com o modelo que a tela está oferecendo, não com o salvo:
+      // é o que permite comparar duas versões antes de publicar uma delas.
+      modelo: corpo.modelo ?? cfg.modeloConversa,
       // O mesmo contexto que a produção manda, para o teste não responder
       // com uma data diferente da que o cliente veria.
       contexto: montarContexto({ agora: new Date(), nome: null, moto: null }),

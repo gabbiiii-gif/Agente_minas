@@ -22,6 +22,13 @@ export interface Deps {
   prompt: string;
   /** Parte volátil do system: data, cliente, moto. Fica fora do cache. */
   contexto?: string;
+  /**
+   * Modelo que responde este turno. Ausente = `MODELO_CONVERSA`.
+   *
+   * Vem de fora porque quem escolhe é o dono, no painel, e a escolha vive em
+   * `agente.config`. O laço não lê configuração: recebe pronto e obedece.
+   */
+  modelo?: string;
   /** Recebe cada chamada de ferramenta — serve ao CLI e ao log de produção. */
   aoUsarFerramenta?: (nome: string, entrada: unknown, resultado: unknown) => void;
 }
@@ -45,6 +52,8 @@ export interface Uso {
 export interface Turno extends Uso {
   texto: string;
   handoff?: Efeito;
+  /** Qual modelo respondeu. Fica no log para o painel comparar versoes. */
+  modelo: string;
 }
 
 /** Teto de idas ao modelo por turno. Acima disso o agente está perdido. */
@@ -72,10 +81,11 @@ function usoZerado(): Uso {
  * aqui: para o cliente, falar com gente é sempre melhor do que receber meia
  * frase, uma mensagem em branco ou silêncio.
  */
-function chamarBalcao(motivo: string, resumo: string, uso: Uso): Turno {
+function chamarBalcao(motivo: string, resumo: string, uso: Uso, modelo: string): Turno {
   return {
     texto: FRASE_HANDOFF,
     handoff: { tipo: "handoff", motivo, resumo, origem: "laco" },
+    modelo,
     ...uso,
   };
 }
@@ -95,6 +105,7 @@ export async function responder(
   imagem?: Imagem,
 ): Promise<Turno> {
   const uso = usoZerado();
+  const modelo = deps.modelo ?? MODELO_CONVERSA;
 
   // A API exige que a conversa comece por uma fala do cliente e devolve 400
   // se o primeiro item for do assistente. O histórico chega cortado no teto
@@ -106,6 +117,7 @@ export async function responder(
       "falha_tecnica",
       "Histórico sem nenhuma fala do cliente; não havia o que responder.",
       uso,
+      modelo,
     );
   }
 
@@ -144,7 +156,7 @@ export async function responder(
 
   for (let i = 0; i < MAX_ITERACOES; i++) {
     const resposta = await deps.anthropic.messages.create({
-      model: MODELO_CONVERSA,
+      model: modelo,
       max_tokens: MAX_TOKENS,
       system,
       thinking: { type: "adaptive" },
@@ -166,6 +178,7 @@ export async function responder(
         "falha_tecnica",
         `A resposta do modelo estourou ${MAX_TOKENS} tokens e veio truncada.`,
         uso,
+        modelo,
       );
     }
 
@@ -176,6 +189,7 @@ export async function responder(
         "recusa",
         `O modelo recusou responder (${resposta.stop_details?.category ?? "sem categoria"}).`,
         uso,
+        modelo,
       );
     }
 
@@ -197,10 +211,11 @@ export async function responder(
           "falha_tecnica",
           "O modelo encerrou o turno sem escrever nada para o cliente.",
           uso,
+          modelo,
         );
       }
 
-      return { texto, ...uso };
+      return { texto, modelo, ...uso };
     }
 
     mensagens.push({ role: "assistant", content: resposta.content });
@@ -223,12 +238,13 @@ export async function responder(
     // parar de pedir ferramentas em paralelo.
     mensagens.push({ role: "user", content: resultados });
 
-    if (handoff) return { texto: FRASE_HANDOFF, handoff, ...uso };
+    if (handoff) return { texto: FRASE_HANDOFF, handoff, modelo, ...uso };
   }
 
   return chamarBalcao(
     "ambiguidade",
     "O agente não fechou o atendimento em 5 passos; conversa precisa de humano.",
     uso,
+    modelo,
   );
 }
