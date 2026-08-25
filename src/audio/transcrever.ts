@@ -7,9 +7,11 @@
  * mandava o áudio e não recebia resposta nenhuma, o que do lado dele parece
  * a loja tendo ignorado. Áudio é como boa parte da clientela pede peça.
  *
- * O provedor é a API de transcrição da OpenAI (Whisper), por HTTP direto e
- * sem SDK: é uma chamada só, multipart, e arrastar mais uma dependência para
- * dentro do bundle do Deno custaria mais do que o código que ela pouparia.
+ * O provedor padrão é a Groq, que serve o mesmo Whisper pela mesma API da
+ * OpenAI por uma fração do preço — $0,111 a hora de áudio contra $0,36. A
+ * chamada é HTTP direto, sem SDK: é uma requisição multipart só, e arrastar
+ * mais uma dependência para dentro do bundle do Deno custaria mais do que o
+ * código que ela pouparia. Trocar de provedor é trocar uma variável.
  *
  * Nunca lança. Falha de transcrição vira `{erro}` e quem chamou decide —
  * no gateway, decide passar para o balcão, que é melhor do que silêncio.
@@ -25,16 +27,54 @@ export interface AudioRecebido {
 
 export interface ConfigTranscricao {
   apiKey: string;
-  /** Padrão `whisper-1`. Trocável sem mexer em código. */
   modelo: string;
-  /** Padrão OpenAI. Existe para apontar a um compatível sem editar isto. */
   url: string;
+  /** Vocabulário que o modelo deve esperar ouvir. Ver `CONTEXTO_PADRAO`. */
+  contexto: string;
 }
+
+/**
+ * Os dois provedores que servem o Whisper pela mesma API.
+ *
+ * Existe como preset porque endereço e modelo andam juntos: configurar a
+ * chave da Groq e esquecer a URL manda o segredo de um serviço para o outro,
+ * e o erro só aparece como 401 no primeiro áudio de cliente.
+ */
+const PROVEDORES: Record<string, { url: string; modelo: string }> = {
+  groq: {
+    url: "https://api.groq.com/openai/v1/audio/transcriptions",
+    // `large-v3` e não `turbo`: 10,3% de erro de palavra contra 12%, por
+    // sete centavos de dólar a mais por hora de áudio. Aqui a palavra errada
+    // é o nome ou o código de uma peça, que vira busca errada e venda errada.
+    modelo: "whisper-large-v3",
+  },
+  openai: {
+    url: "https://api.openai.com/v1/audio/transcriptions",
+    modelo: "whisper-1",
+  },
+};
+
+/**
+ * O que o modelo deve esperar ouvir.
+ *
+ * O Whisper transcreve som e não sabe do que a loja vive: sem isto "kit
+ * relação" sai "quite relação", "Biz" sai "bis" e "retentor" sai "retentor"
+ * ou "retendor" conforme o chiado. Nome de peça errado vira busca errada, que
+ * é o pior jeito de errar aqui. O texto vai em português porque a
+ * documentação pede o idioma do próprio áudio, e cabe em 224 tokens.
+ */
+const CONTEXTO_PADRAO =
+  "Conversa de balcão de loja de peças de moto em Altamira, Pará. " +
+  "Peças: retentor, pastilha de freio, kit relação, coroa, pinhão, vela, " +
+  "óleo 20W50, rolamento, corrente, cabo de embreagem, farol, pisca, bateria, " +
+  "amortecedor, guidão, carburador, filtro de ar, junta, cilindro, pneu. " +
+  "Motos: Honda Titan, Fan, Biz, Pop, CG, Bros, XRE, Falcon; " +
+  "Yamaha Factor, Fazer, Crosser, Lander, YBR; Suzuki Yes, Intruder.";
 
 /**
  * Teto de tamanho. O da API é 25 MB; o daqui é menor de propósito, porque
  * áudio de dois minutos de WhatsApp tem uns 300 KB — acima de 8 MB não é
- * pergunta de balcão, é vídeo ou gravação longa, e o balcão atende melhor.
+ * pergunta de balcão, é gravação longa, e gente atende melhor.
  */
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -55,10 +95,17 @@ export function lerConfigTranscricao(
 ): ConfigTranscricao | null {
   const apiKey = fonte.TRANSCRICAO_API_KEY?.trim();
   if (!apiKey) return null;
+
+  const nome = fonte.TRANSCRICAO_PROVEDOR?.trim().toLowerCase() || "groq";
+  const preset = PROVEDORES[nome] ?? PROVEDORES.groq!;
+
   return {
     apiKey,
-    modelo: fonte.TRANSCRICAO_MODELO?.trim() || "whisper-1",
-    url: fonte.TRANSCRICAO_URL?.trim() || "https://api.openai.com/v1/audio/transcriptions",
+    // As duas variáveis avulsas continuam valendo, para apontar a um serviço
+    // compatível que não esteja na lista.
+    modelo: fonte.TRANSCRICAO_MODELO?.trim() || preset.modelo,
+    url: fonte.TRANSCRICAO_URL?.trim() || preset.url,
+    contexto: fonte.TRANSCRICAO_CONTEXTO?.trim() || CONTEXTO_PADRAO,
   };
 }
 
@@ -132,6 +179,10 @@ export async function transcrever(
   forma.append("model", cfg.modelo);
   forma.append("language", "pt");
   forma.append("response_format", "json");
+  // Temperatura zero é o que os dois provedores recomendam para transcrição:
+  // aqui não se quer criatividade, se quer o que foi dito.
+  forma.append("temperature", "0");
+  if (cfg.contexto) forma.append("prompt", cfg.contexto);
 
   try {
     const r = await fetch(cfg.url, {

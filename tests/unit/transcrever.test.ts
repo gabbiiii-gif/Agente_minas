@@ -7,7 +7,12 @@ import { transcrever, lerConfigTranscricao } from "../../src/audio/transcrever.j
  * isso todo caminho de erro aqui precisa devolver `{erro}`, nunca explodir.
  */
 
-const CFG = { apiKey: "chave", modelo: "whisper-1", url: "https://exemplo/transcricoes" };
+const CFG = {
+  apiKey: "chave",
+  modelo: "whisper-large-v3",
+  url: "https://exemplo/transcricoes",
+  contexto: "peças de moto",
+};
 
 /** "ABC" em base64, pequeno o bastante para não bater em teto nenhum. */
 const AUDIO = { base64: "QUJD", mimetype: "audio/ogg; codecs=opus" };
@@ -38,10 +43,25 @@ describe("lerConfigTranscricao", () => {
     expect(lerConfigTranscricao({ TRANSCRICAO_API_KEY: "   " })).toBeNull();
   });
 
-  it("tem padrão de modelo e de endereço", () => {
+  it("assume Groq quando ninguém disse o provedor", () => {
     const cfg = lerConfigTranscricao({ TRANSCRICAO_API_KEY: "k" })!;
+    expect(cfg.url).toContain("api.groq.com");
+    expect(cfg.modelo).toBe("whisper-large-v3");
+    // O contexto vem preenchido: é ele que segura o nome das peças.
+    expect(cfg.contexto).toMatch(/retentor/i);
+  });
+
+  it("endereço e modelo andam juntos ao trocar de provedor", () => {
+    // Configurar a chave de um serviço e esquecer a URL mandaria o segredo
+    // para o outro, e o erro só apareceria como 401 no primeiro áudio.
+    const cfg = lerConfigTranscricao({ TRANSCRICAO_API_KEY: "k", TRANSCRICAO_PROVEDOR: "openai" })!;
+    expect(cfg.url).toContain("api.openai.com");
     expect(cfg.modelo).toBe("whisper-1");
-    expect(cfg.url).toContain("openai.com");
+  });
+
+  it("provedor desconhecido cai no padrão em vez de montar url inválida", () => {
+    const cfg = lerConfigTranscricao({ TRANSCRICAO_API_KEY: "k", TRANSCRICAO_PROVEDOR: "inventado" })!;
+    expect(cfg.url).toContain("api.groq.com");
   });
 
   it("deixa trocar modelo e endereço sem mexer em código", () => {
@@ -69,7 +89,9 @@ describe("transcrever", () => {
     expect(endereco).toBe(CFG.url);
 
     const forma = init.body as FormData;
-    expect(forma.get("model")).toBe("whisper-1");
+    expect(forma.get("model")).toBe("whisper-large-v3");
+    expect(forma.get("temperature")).toBe("0");
+    expect(forma.get("prompt")).toBe("peças de moto");
     // Sem isto o Whisper às vezes decide que um áudio chiado é espanhol e
     // devolve a transcrição traduzida — pior que nenhuma, porque parece certa.
     expect(forma.get("language")).toBe("pt");

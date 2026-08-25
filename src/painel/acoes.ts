@@ -16,6 +16,7 @@ import { responder, type Fala } from "../agente/laco.js";
 import { executarFerramenta } from "../ferramentas/executar.js";
 import { enviar } from "../saida/evolution.js";
 import { gravarMensagem } from "../conversa/historico.js";
+import { lerConfigTranscricao } from "../audio/transcrever.js";
 
 /**
  * O que o painel faz, separado de como ele é servido.
@@ -62,7 +63,8 @@ export async function acaoLerConfig(pool: Pool) {
     // vira texto ou vai direto ao balcão; ninguém precisa ver o segredo.
     transcricao: {
       ativa: Boolean(process.env.TRANSCRICAO_API_KEY?.trim()),
-      modelo: process.env.TRANSCRICAO_MODELO?.trim() || "whisper-1",
+      modelo: lerConfigTranscricao()?.modelo ?? null,
+      provedor: process.env.TRANSCRICAO_PROVEDOR?.trim().toLowerCase() || "groq",
     },
   };
 }
