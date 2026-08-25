@@ -17,6 +17,7 @@ import { anotarAviso } from "../conversa/avisos.js";
 import { executarFerramenta } from "../ferramentas/executar.js";
 import { enviar, type ConfigEvolution } from "../saida/evolution.js";
 import { avaliar } from "./guardas.js";
+import { transcrever, lerConfigTranscricao } from "../audio/transcrever.js";
 
 export interface DepsAtendimento {
   pool: Pool;
@@ -32,6 +33,13 @@ export interface DepsAtendimento {
   debounce?: Debounce;
   /** Para onde vai o alerta quando o turno falha. null = ninguém é avisado. */
   telefoneDono?: string | null;
+  /**
+   * Como transcrever áudio. Ausente = o áudio vai direto para o balcão.
+   *
+   * Recebe por parâmetro em vez de ler o ambiente para o teste poder
+   * exercitar os dois caminhos sem mexer em variável de processo.
+   */
+  transcricao?: { transcrever: typeof transcrever } | null;
 }
 
 export interface Atendimento {
@@ -122,6 +130,35 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
     }
   }
 
+  /**
+   * Áudio vira texto antes de qualquer outra coisa.
+   *
+   * Devolve o que gravar como conteúdo e se o agente pode seguir. Quando a
+   * transcrição não está configurada ou falha, o texto gravado diz o motivo
+   * e `seguir` vem false — o áudio existe no histórico e o balcão assume,
+   * em vez de o cliente ficar sem resposta como acontecia antes.
+   */
+  async function ouvir(
+    evento: Extract<ReturnType<typeof lerEvento>, { tipo: "audio" }>,
+  ): Promise<{ conteudo: string; seguir: boolean }> {
+    const cfg = lerConfigTranscricao();
+    if (cfg === null) {
+      return { conteudo: "[áudio recebido — transcrição não configurada]", seguir: false };
+    }
+
+    const motor = deps.transcricao?.transcrever ?? transcrever;
+    const r = await motor(
+      { base64: evento.midiaBase64, mimetype: evento.mimetype, segundos: evento.segundos },
+      cfg,
+    );
+
+    if ("erro" in r) {
+      console.log(`áudio não transcrito: ${r.erro}`);
+      return { conteudo: `[áudio recebido — não deu para transcrever: ${r.erro}]`, seguir: false };
+    }
+    return { conteudo: r.texto, seguir: true };
+  }
+
   async function atender(corpo: unknown): Promise<string | null> {
     const evento = lerEvento(corpo);
     if ("descartar" in evento) {
@@ -131,8 +168,19 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
 
     const contato = await resolverContato(deps.pool, evento.telefone, evento.nome);
     const conversa = await conversaAtiva(deps.pool, contato.id);
-    const conteudo = evento.tipo === "texto" ? evento.texto : evento.legenda;
-    const tipoMidia = evento.tipo === "imagem" ? "imagem" : "texto";
+
+    // A transcrição acontece antes de gravar para o histórico guardar o que
+    // o cliente disse, e não um marcador que ninguém consegue ler depois.
+    const ouvido = evento.tipo === "audio" ? await ouvir(evento) : null;
+
+    const conteudo =
+      evento.tipo === "texto"
+        ? evento.texto
+        : evento.tipo === "imagem"
+          ? evento.legenda
+          : ouvido!.conteudo;
+    const tipoMidia =
+      evento.tipo === "imagem" ? "imagem" : evento.tipo === "audio" ? "audio" : "texto";
 
     // Mensagem saindo do próprio número da loja: o balcão respondeu pelo
     // celular. Registra como fala do humano e cala o bot — a IA não pode
@@ -161,6 +209,22 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
     // Webhook repetido: o Evolution reenvia quando não recebe 200 a tempo.
     // Responder duas vezes é o erro que o cliente percebe na hora.
     if (!nova) return null;
+
+    // Áudio que não virou texto: o agente não tem o que responder, e chutar
+    // a partir de um marcador seria pior. Quem atende é o balcão.
+    if (ouvido !== null && !ouvido.seguir) {
+      await marcarStatus(deps.pool, conversa.id, "aguardando_humano", {
+        desfecho: "handoff",
+        resumo: "Cliente mandou áudio e o sistema não conseguiu transcrever.",
+      });
+      await enviar(
+        deps.pool,
+        deps.evolution,
+        evento.telefone,
+        "Recebi seu áudio. Vou chamar o pessoal do balcão aqui pra te atender. Um minuto.",
+      ).catch((erro) => console.error("não consegui avisar sobre o áudio:", erro));
+      return null;
+    }
 
     if (evento.tipo === "imagem") {
       fotosPendentes.set(conversa.id, {

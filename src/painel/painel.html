@@ -1020,6 +1020,20 @@ tr.inativo td { opacity: .5; }
       <div class="face">
         <div class="face-topo">
           <div class="cresce">
+            <span class="rotulo">Áudio do cliente</span>
+            <h2>Mensagem de voz</h2>
+            <p class="dica">O modelo lê texto, foto e PDF — não escuta áudio. Para o agente atender quem manda voz, o áudio é transcrito antes.</p>
+          </div>
+          <span class="etiqueta" id="etiquetaAudio">—</span>
+        </div>
+        <div class="face-corpo">
+          <p class="dica" id="estadoAudio" style="margin:0"></p>
+        </div>
+      </div>
+
+      <div class="face">
+        <div class="face-topo">
+          <div class="cresce">
             <span class="rotulo">Dados da loja</span>
             <h2>O que o agente responde sobre a loja</h2>
             <p class="dica">Entram no texto das instruções: é o que ele diz quando perguntam horário ou endereço.</p>
@@ -2417,6 +2431,13 @@ async function carregarAjustes() {
   $("teto").value = cfg.tetoContatosNovosHora;
   $("maxMsg").value = cfg.maxMensagensConversa;
   pintarEstadoBot();
+
+  const t = cfg.transcricao ?? { ativa: false };
+  $("etiquetaAudio").textContent = t.ativa ? "transcrevendo" : "desligada";
+  $("etiquetaAudio").className = "etiqueta " + (t.ativa ? "ia" : "humano");
+  $("estadoAudio").textContent = t.ativa
+    ? `O áudio vira texto pelo modelo ${t.modelo} e o agente responde normalmente. A transcrição fica gravada no histórico da conversa.`
+    : "Sem chave de transcrição neste ambiente. O áudio é gravado, o cliente recebe um aviso e a conversa vai para o balcão — ninguém fica sem resposta, mas o agente não atende voz. Configure TRANSCRICAO_API_KEY.";
 }
 
 function pintarEstadoBot() {

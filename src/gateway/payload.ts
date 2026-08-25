@@ -18,6 +18,17 @@ export type Recebida =
       mimetype: string;
       msgExtId: string;
       fromMe: boolean;
+    }
+  | {
+      tipo: "audio";
+      telefone: string;
+      nome: string;
+      midiaBase64: string;
+      mimetype: string;
+      /** Duração informada pelo WhatsApp, quando vem. */
+      segundos?: number;
+      msgExtId: string;
+      fromMe: boolean;
     };
 
 export type Descarte = { descartar: string };
@@ -71,11 +82,31 @@ export function lerEvento(corpo: unknown): Recebida | Descarte {
   const nome = String(dados.pushName ?? "");
   const msg = (dados.message ?? {}) as Record<string, any>;
 
-  if (msg.audioMessage) return { descartar: "audio" };
-
   const corpoTexto = texto(msg);
   if (corpoTexto !== null && corpoTexto.trim() !== "") {
     return { tipo: "texto", telefone, nome, texto: corpoTexto.trim(), msgExtId, fromMe };
+  }
+
+  // O áudio vem antes da imagem porque a mensagem de voz não tem legenda:
+  // se caísse no ramo de texto, viraria "sem conteúdo tratável".
+  const aud = msg.audioMessage;
+  if (aud) {
+    const base64 = String(dados.message?.base64 ?? dados.base64 ?? "");
+    if (base64 === "") {
+      return { descartar: "áudio sem base64 — confira webhookBase64 no webhook" };
+    }
+    const segundos = Number(aud.seconds);
+    return {
+      tipo: "audio",
+      telefone,
+      nome,
+      midiaBase64: base64,
+      // O WhatsApp manda ogg/opus; o padrão cobre o campo ausente.
+      mimetype: String(aud.mimetype ?? "audio/ogg"),
+      segundos: Number.isFinite(segundos) && segundos > 0 ? segundos : undefined,
+      msgExtId,
+      fromMe,
+    };
   }
 
   const img = msg.imageMessage;

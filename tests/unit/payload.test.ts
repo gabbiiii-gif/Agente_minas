@@ -65,10 +65,31 @@ describe("lerEvento — descartes e casos de borda", () => {
     expect(lerEvento(evento({}))).toEqual({ descartar: "sem conteúdo tratável" });
   });
 
-  it("descarta áudio, que a v1 não trata", () => {
-    expect(
-      lerEvento(evento({ audioMessage: { seconds: 3 } }, { messageType: "audioMessage" })),
-    ).toEqual({ descartar: "audio" });
+  it("lê áudio para transcrever, com a duração que o WhatsApp informou", () => {
+    const r = lerEvento(
+      evento(
+        { audioMessage: { seconds: 3, mimetype: "audio/ogg; codecs=opus" }, base64: "QUJD" },
+        { messageType: "audioMessage" },
+      ),
+    );
+    expect(r).toMatchObject({ tipo: "audio", segundos: 3, midiaBase64: "QUJD" });
+    if ("tipo" in r && r.tipo === "audio") {
+      expect(r.mimetype).toMatch(/^audio\//);
+    }
+  });
+
+  it("descarta áudio sem base64 dizendo onde olhar", () => {
+    // Sem `webhookBase64` ligado no Evolution só vem a URL criptografada do
+    // WhatsApp, que não dá para baixar. O motivo cita a configuração porque é
+    // o que se vai procurar no log.
+    const r = lerEvento(evento({ audioMessage: { seconds: 3 } }, { messageType: "audioMessage" }));
+    expect(r).toHaveProperty("descartar");
+    expect((r as { descartar: string }).descartar).toMatch(/webhookBase64/);
+  });
+
+  it("aceita áudio sem duração informada", () => {
+    const r = lerEvento(evento({ audioMessage: {}, base64: "QUJD" }));
+    expect(r).toMatchObject({ tipo: "audio", segundos: undefined });
   });
 
   it("descarta grupo pelo sufixo do jid", () => {

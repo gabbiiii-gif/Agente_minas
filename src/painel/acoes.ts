@@ -54,7 +54,17 @@ export function obterAnthropic(): Anthropic {
 
 export async function acaoLerConfig(pool: Pool) {
   const cfg = await lerConfig(pool, false);
-  return { ...cfg, promptPadrao: promptPadrao(cfg), modelos: MODELOS_DISPONIVEIS };
+  return {
+    ...cfg,
+    promptPadrao: promptPadrao(cfg),
+    modelos: MODELOS_DISPONIVEIS,
+    // Só o estado, nunca a chave. A tela precisa saber se o áudio do cliente
+    // vira texto ou vai direto ao balcão; ninguém precisa ver o segredo.
+    transcricao: {
+      ativa: Boolean(process.env.TRANSCRICAO_API_KEY?.trim()),
+      modelo: process.env.TRANSCRICAO_MODELO?.trim() || "whisper-1",
+    },
+  };
 }
 
 /** Valida antes de gravar: o painel não pode salvar algo que derrube o agente. */
