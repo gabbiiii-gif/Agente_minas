@@ -35,6 +35,34 @@ describe("montarPrompt — regras que o negócio não pode perder", () => {
     expect(prompt).toMatch(/NUNCA deduza compatibilidade/);
   });
 
+  it("proíbe pedir licença para chamar o balcão", () => {
+    // O agente perguntava "Gostaria que eu consultasse o balcão sobre isso?" e
+    // ficava esperando. Pedir licença devolve ao cliente uma decisão que é do
+    // agente, gasta um turno, e quem responde "não precisa" fica sem
+    // atendimento nenhum — foi assim que uma conversa real morreu.
+    const prompt = montarPrompt(LOJA);
+    expect(prompt).toMatch(/NUNCA PEÇA LICENÇA PARA CHAMAR O BALCÃO/);
+    expect(prompt).toMatch(/na MESMA mensagem/);
+  });
+
+  it("não deixa nenhuma pergunta de licença solta no texto", () => {
+    // A regra acima não adianta se o corpo do prompt continuar dando exemplo
+    // do contrário: o modelo copia o exemplo, não a regra. Então o bloco da
+    // proibição — onde as frases aparecem de propósito, como exemplo do que
+    // não fazer — sai da conta, e o resto do texto tem de estar limpo.
+    const texto = montarPrompt(LOJA);
+    const abre = texto.indexOf("# NUNCA PEÇA LICENÇA PARA CHAMAR O BALCÃO");
+    const fecha = texto.indexOf("# PRECEDÊNCIA");
+    expect(abre, "o bloco da proibição sumiu do prompt").toBeGreaterThan(-1);
+    expect(fecha).toBeGreaterThan(abre);
+
+    const sobraram = (texto.slice(0, abre) + texto.slice(fecha))
+      .split("\n")
+      .filter((l) => /quer que eu (veja|consulte|pergunte)|gostaria que eu|posso chamar/i.test(l));
+
+    expect(sobraram, `pedido de licença fora da proibição: ${sobraram.join(" / ")}`).toHaveLength(0);
+  });
+
   it("repete preço e quantidade na lista final de proibições", () => {
     const proibicoes = prompt.slice(prompt.indexOf("# PROIBIÇÕES"));
     expect(proibicoes).toMatch(/Nunca fale preço/);
