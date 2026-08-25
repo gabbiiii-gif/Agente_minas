@@ -25,6 +25,7 @@ import {
   acaoAlternarIa,
   acaoAlternarIaEmLote,
   acaoResponderManual,
+  acaoMidia,
   acaoMetricas,
   acaoDemandas,
   acaoSaidasPresas,
@@ -212,6 +213,11 @@ export default async function handler(req: Req, resp: Resp): Promise<void> {
       }
 
       ou(await acaoLerConversa(pool, id), 404);
+      return;
+    }
+
+    if (raiz === "midias" && rota[1] !== undefined) {
+      ou(await acaoMidia(pool, rota[1]), 404);
       return;
     }
 

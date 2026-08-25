@@ -56,21 +56,25 @@ export async function conversaAtiva(pool: Pool, contatoId: string): Promise<Conv
 }
 
 /**
- * Grava a mensagem e diz se ela é nova.
+ * Grava a mensagem e devolve o id dela, ou null se ela já existia.
  *
- * `false` significa que este `msg_ext_id` já estava no banco: o Evolution
+ * null significa que este `msg_ext_id` já estava no banco: o Evolution
  * reenviou o webhook porque não recebeu 200 a tempo. Quem chama deve parar
  * aí — responder duas vezes à mesma mensagem é o erro que o cliente enxerga.
+ *
+ * O id vem como texto porque a coluna é `bigserial` e o driver entrega bigint
+ * assim; ele serve para pendurar a foto na mensagem, em `agente.midias`.
  *
  * Mensagem do agente vai sem `msg_ext_id` (null), e null nunca conflita em
  * índice único do Postgres — então o agente pode falar quantas vezes precisar.
  */
-export async function gravarMensagem(pool: Pool, m: NovaMensagem): Promise<boolean> {
-  const { rowCount } = await pool.query(
+export async function gravarMensagem(pool: Pool, m: NovaMensagem): Promise<string | null> {
+  const { rows } = await pool.query<{ id: string }>(
     `insert into agente.mensagens
        (conversa_id, papel, conteudo, tipo_midia, midia_url, msg_ext_id, tokens_in, tokens_out, modelo)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-     on conflict (msg_ext_id) do nothing`,
+     on conflict (msg_ext_id) do nothing
+     returning id`,
     [
       m.conversaId,
       m.papel,
@@ -84,13 +88,40 @@ export async function gravarMensagem(pool: Pool, m: NovaMensagem): Promise<boole
     ],
   );
 
-  if ((rowCount ?? 0) > 0) {
-    await pool.query("update agente.conversas set ultima_msg_em = now() where id = $1", [
-      m.conversaId,
-    ]);
-    return true;
+  const id = rows[0]?.id;
+  if (id === undefined) return null;
+
+  await pool.query("update agente.conversas set ultima_msg_em = now() where id = $1", [
+    m.conversaId,
+  ]);
+  return String(id);
+}
+
+/**
+ * Guarda a foto que veio com a mensagem.
+ *
+ * Os bytes ficam no Postgres e não num bucket: o volume não paga outro
+ * serviço, e bucket traria chave nova e política de acesso para configurar
+ * errado. Nunca lança — perder a foto é ruim, perder a resposta ao cliente
+ * porque a foto não coube é pior.
+ */
+export async function guardarMidia(
+  pool: Pool,
+  mensagemId: string,
+  base64: string,
+  mime: string,
+): Promise<void> {
+  try {
+    const limpo = base64.includes(",") ? base64.slice(base64.indexOf(",") + 1) : base64;
+    await pool.query(
+      `insert into agente.midias (mensagem_id, mime, bytes, tamanho)
+       values ($1, $2, decode($3, 'base64'), octet_length(decode($3, 'base64')))
+       on conflict (mensagem_id) do nothing`,
+      [mensagemId, mime, limpo],
+    );
+  } catch (erro) {
+    console.error("não consegui guardar a foto:", erro);
   }
-  return false;
 }
 
 /**

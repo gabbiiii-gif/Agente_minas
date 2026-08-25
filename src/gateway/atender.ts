@@ -6,6 +6,7 @@ import { resolverContato, silenciarPorHumano } from "../conversa/contatos.js";
 import {
   conversaAtiva,
   gravarMensagem,
+  guardarMidia,
   ultimasMensagens,
   contarMensagens,
   marcarStatus,
@@ -239,6 +240,10 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
         base64: evento.midiaBase64,
         mimetype: evento.mimetype,
       });
+      // A foto ia para o modelo e era descartada: o balcão via "foto" escrito
+      // e não via a foto. Foto de peça velha é justamente o que resolve a
+      // compatibilidade que o agente não fecha sozinho.
+      await guardarMidia(deps.pool, nova, evento.midiaBase64, evento.mimetype);
     }
 
     // Daqui para baixo é só a decisão de o BOT responder ou não. A mensagem

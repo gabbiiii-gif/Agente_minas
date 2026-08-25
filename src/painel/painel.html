@@ -440,12 +440,24 @@ tr.inativo td { opacity: .5; }
 /* Linha de conversa: caixa de seleção, área clicável e ação, tudo na mesma
    linha. Ela precisa ser um div — botão dentro de botão não é HTML válido, e
    o clique do de dentro nunca chegaria a disparar. */
+.item.selecionavel {
+  cursor: default;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 10px;
+  align-items: center;
+}
 .item .abrir {
-  flex: 1 1 auto; min-width: 0; text-align: left; padding: 0;
+  grid-column: 2; min-width: 0; text-align: left; padding: 0;
   background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
 }
 .item .abrir:hover .nome { color: var(--ambar); }
-.item.selecionavel { cursor: default; }
+.item .marca { grid-row: 1 / span 2; align-self: start; margin-top: 3px; }
+.item .cabecalhoLinha { display: flex; align-items: baseline; gap: 8px; }
+.item .cabecalhoLinha .nome { flex: 1 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.item .rodapeLinha { grid-column: 2; display: flex; align-items: center; gap: 8px; }
+.item .rodapeLinha .esticar { flex: 1; }
 .marca {
   width: 16px; height: 16px; flex: none; margin: 0;
   accent-color: var(--ambar); cursor: pointer;
@@ -523,6 +535,50 @@ tr.inativo td { opacity: .5; }
 }
 .olho:hover { color: var(--leite); }
 .olho svg { width: 19px; height: 19px; }
+
+
+/* ------------------------------------------------------ a bancada de duas colunas
+   Conversas é onde o balcão passa o dia, e ler uma conversa não pode custar
+   rolar a página inteira. Lista à esquerda, transcrição à direita, cada uma
+   rolando por conta própria — o formato que quem usa WhatsApp já conhece. */
+.bancada {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: 14px;
+  height: calc(100dvh - 208px);
+  min-height: 440px;
+}
+.bancada .face { margin-bottom: 0; display: flex; flex-direction: column; min-height: 0; }
+.coluna-corpo { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* `min-height: 0` nos dois: sem isso o filho que rola estica o pai e some a
+   rolagem — é o defeito clássico de flex dentro de grid. */
+.rolante { overflow-y: auto; flex: 1; min-height: 0; }
+.transcricao.rolante { max-height: none; margin-top: 0; }
+.semConversa { display: grid; place-items: center; flex: 1; text-align: center; padding: 24px; }
+#detalhe .face-topo { padding-bottom: 14px; border-bottom: 1px solid var(--traco); }
+#detalhe .giro { flex: 0 0 auto; }
+
+/* A foto que o cliente mandou. Miniatura na transcrição, inteira na gaveta. */
+.balao .foto {
+  display: block; margin-top: 6px;
+  max-width: 240px; max-height: 200px; width: auto; height: auto;
+  object-fit: contain;
+  border-radius: var(--raio); border: 1px solid var(--traco); cursor: zoom-in;
+  background: var(--carter2);
+}
+.balao .foto:hover { border-color: var(--ambar); }
+.gaveta-face .fotoInteira { width: 100%; border-radius: var(--raio); border: 1px solid var(--traco); }
+
+/* Desfecho antigo não é alarme do presente: a data ao lado evita que um erro
+   de ontem pareça estar acontecendo agora. */
+.desfecho { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.desfecho .quando { flex: none; }
+
+@media (max-width: 900px) {
+  .bancada { grid-template-columns: 1fr; height: auto; }
+  .bancada .face { min-height: 0; }
+  .rolante { max-height: 46vh; }
+}
 
 @media (max-width: 620px) {
   .cabine-int { gap: 10px; }
@@ -688,67 +744,77 @@ tr.inativo td { opacity: .5; }
 
     <!-- ------------------------------------------------------ conversas -->
     <section id="secConversas" role="tabpanel" hidden>
-      <div class="face">
-        <div class="face-topo">
-          <div class="cresce">
-            <span class="rotulo">Piloto</span>
-            <h2>Conversas</h2>
-            <p class="dica">Leia todas, todo dia. Procure por preço dito, quantidade dita, compatibilidade afirmada sem confirmação e código inventado.</p>
-          </div>
-          <button id="atualizarConversas" class="mini">Atualizar</button>
-        </div>
-        <div class="face-corpo">
-          <input type="search" id="buscaConversa" placeholder="nome ou telefone">
-          <div class="acoes" style="margin-top:10px">
-            <button class="mini filtro" data-filtro="todas" aria-pressed="true">Todas</button>
-            <button class="mini filtro" data-filtro="balcao" aria-pressed="false">Aguardando balcão</button>
-            <button class="mini filtro" data-filtro="ia" aria-pressed="false">Com a IA</button>
-            <button class="mini filtro" data-filtro="encerrada" aria-pressed="false">Encerradas</button>
-          </div>
-          <label class="marcarTodas">
-            <input type="checkbox" class="marca" id="marcarTodas">
-            <span class="rotulo">Marcar todas as desta lista</span>
-          </label>
+      <div class="bancada">
 
-          <div class="lote" id="barraLote" hidden>
-            <span class="quantas" id="quantasMarcadas"></span>
-            <button class="mini chave-acao" id="loteDevolver">Devolver à IA</button>
-            <button class="mini" id="lotePassar">Passar ao balcão</button>
-            <span style="flex:1"></span>
-            <button class="mini plano" id="loteLimpar">Desmarcar</button>
+        <div class="face coluna">
+          <div class="face-topo">
+            <div class="cresce">
+              <span class="rotulo">Piloto</span>
+              <h2>Conversas</h2>
+            </div>
+            <button id="atualizarConversas" class="mini">Atualizar</button>
           </div>
-
-          <div class="lista" id="listaConversas"><span class="vazio">carregando…</span></div>
-        </div>
-      </div>
-
-      <div class="face" id="detalhe" hidden>
-        <div class="face-topo">
-          <div class="cresce">
-            <span class="rotulo" id="detalheSub"></span>
-            <h2 id="detalheNome"></h2>
-          </div>
-          <span class="etiqueta" id="detalheEtiqueta"></span>
-        </div>
-        <div class="face-corpo">
-          <div class="giro">
-            <label class="interruptor">
-              <input type="checkbox" id="iaConversa">
-              <span class="trilho"></span>
+          <div class="face-corpo coluna-corpo">
+            <input type="search" id="buscaConversa" placeholder="nome ou telefone">
+            <div class="acoes" style="margin-top:10px">
+              <button class="mini filtro" data-filtro="todas" aria-pressed="true">Todas</button>
+              <button class="mini filtro" data-filtro="balcao" aria-pressed="false">Balcão</button>
+              <button class="mini filtro" data-filtro="ia" aria-pressed="false">Com a IA</button>
+              <button class="mini filtro" data-filtro="encerrada" aria-pressed="false">Encerradas</button>
+            </div>
+            <label class="marcarTodas">
+              <input type="checkbox" class="marca" id="marcarTodas">
+              <span class="rotulo">Marcar todas as desta lista</span>
             </label>
-            <span class="estado" id="estadoIa"></span>
-          </div>
-          <p class="dica">Desligar cala o agente só nesta conversa, por 6 horas, e marca que o balcão assumiu.</p>
 
-          <div class="transcricao" id="historicoConversa"></div>
+            <div class="lote" id="barraLote" hidden>
+              <span class="quantas" id="quantasMarcadas"></span>
+              <button class="mini chave-acao" id="loteDevolver">Devolver à IA</button>
+              <button class="mini" id="lotePassar">Passar ao balcão</button>
+              <span style="flex:1"></span>
+              <button class="mini plano" id="loteLimpar">Desmarcar</button>
+            </div>
 
-          <label for="respostaManual"><span class="rotulo">Responder como balcão</span></label>
-          <textarea id="respostaManual" rows="3" placeholder="Sai pelo mesmo WhatsApp da loja e fica no histórico."></textarea>
-          <div class="acoes">
-            <button class="chave-acao" id="enviarManual">Enviar ao cliente</button>
-            <span class="recado" id="recadoManual"></span>
+            <div class="lista rolante" id="listaConversas"><span class="vazio">carregando…</span></div>
           </div>
         </div>
+
+        <div class="face coluna" id="detalhe">
+          <div class="face-topo" id="detalheTopo" hidden>
+            <div class="cresce">
+              <span class="rotulo" id="detalheSub"></span>
+              <h2 id="detalheNome"></h2>
+            </div>
+            <span class="etiqueta" id="detalheEtiqueta"></span>
+            <div class="giro">
+              <label class="interruptor">
+                <input type="checkbox" id="iaConversa">
+                <span class="trilho"></span>
+              </label>
+              <span class="estado" id="estadoIa"></span>
+            </div>
+          </div>
+
+          <div class="face-corpo coluna-corpo" id="detalheCorpo">
+            <div class="semConversa" id="semConversa">
+              <span class="vazio">Escolha uma conversa à esquerda para ler o histórico e responder.</span>
+            </div>
+
+            <div class="transcricao rolante" id="historicoConversa" hidden></div>
+
+            <div id="areaResposta" hidden>
+              <textarea id="respostaManual" rows="2"
+                placeholder="Responder como balcão — sai pelo mesmo WhatsApp da loja e fica no histórico."></textarea>
+              <div class="acoes" style="margin-top:9px">
+                <button class="chave-acao" id="enviarManual">Enviar ao cliente</button>
+                <span class="recado" id="recadoManual"></span>
+                <span style="flex:1"></span>
+                <span class="dica" style="margin:0">Desligar a chave cala o agente aqui por 6 horas.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -1602,12 +1668,17 @@ function desenharConversas() {
       <input type="checkbox" class="marca" ${marcadas.has(c.id) ? "checked" : ""}
              aria-label="Marcar conversa de ${escapar(c.nome) || escapar(c.telefone)}">
       <button class="abrir">
-        <span class="nome">${escapar(c.nome) || "sem nome"}</span>
+        <span class="cabecalhoLinha">
+          <span class="nome">${escapar(c.nome) || "sem nome"}</span>
+          <span class="quando">${quando(c.ultimaMsgEm)}</span>
+        </span>
         <span class="tel">${escapar(c.telefone)} · ${c.mensagens} mensagens</span>
       </button>
-      ${et}
-      <span class="quando">${quando(c.ultimaMsgEm)}</span>
-      ${acao}
+      <span class="rodapeLinha">
+        ${et}
+        <span class="esticar"></span>
+        ${acao}
+      </span>
     </div>`;
   }).join("");
 
@@ -1688,12 +1759,15 @@ async function abrirConversa(id) {
   const c = await pegar("/api/conversas/" + id);
   conversaAberta = id;
 
-  $("detalhe").hidden = false;
+  $("detalheTopo").hidden = false;
+  $("semConversa").hidden = true;
+  $("historicoConversa").hidden = false;
+  $("areaResposta").hidden = false;
+
   $("detalheNome").textContent = c.nome || c.telefone;
   $("detalheSub").textContent = [
     c.telefone,
     c.moto ? "moto: " + c.moto : "moto não identificada",
-    c.desfecho ? "desfecho: " + c.desfecho : null,
   ].filter(Boolean).join(" · ");
 
   const et = $("detalheEtiqueta");
@@ -1706,19 +1780,70 @@ async function abrirConversa(id) {
   const hist = $("historicoConversa");
   hist.innerHTML = c.mensagens.length === 0
     ? '<span class="vazio">Sem mensagens.</span>'
-    : c.mensagens.map((m) => `<div class="balao ${m.papel}">
-        <div class="quem">${escapar(m.papel)} · ${quando(m.criadoEm)}${m.tipoMidia === "imagem" ? " · foto" : ""}</div>
-        <div class="txt">${escapar(m.conteudo)}</div>
-      </div>`).join("");
-  hist.scrollTop = hist.scrollHeight;
+    : c.mensagens.map(desenharBalao).join("");
 
+  // O desfecho vem datado: um erro de ontem no topo da transcrição parece
+  // estar acontecendo agora, e foi exatamente assim que um 401 já resolvido
+  // continuou assustando dias depois.
   if (c.resumo) {
-    hist.insertAdjacentHTML("afterbegin",
-      `<div class="aviso" style="margin:0 0 12px">${escapar(c.resumo)}</div>`);
+    const q = quandoLongo(c.mensagens.at(-1)?.criadoEm ?? c.iniciadaEm);
+    hist.insertAdjacentHTML(
+      "afterbegin",
+      `<div class="aviso ${c.desfecho === "falha" ? "grave" : ""}" style="margin:0 0 12px">
+         <div class="desfecho">
+           <span class="rotulo">${escapar(c.desfecho ?? "resumo")} · ${q}</span>
+         </div>
+         ${escapar(c.resumo)}
+       </div>`,
+    );
   }
 
+  hist.scrollTop = hist.scrollHeight;
+  carregarFotos(hist);
   desenharConversas();
-  $("detalhe").scrollIntoView({ behavior: REDUZIR ? "auto" : "smooth", block: "nearest" });
+}
+
+/** Uma fala na transcrição. A foto entra como miniatura, carregada depois. */
+function desenharBalao(m) {
+  const corpo = m.midiaId
+    ? `<img class="foto" data-midia="${m.midiaId}" alt="foto enviada pelo cliente">`
+    : m.tipoMidia === "imagem"
+      ? '<span class="vazio">foto não guardada — é anterior a esta versão do painel</span>'
+      : "";
+
+  return `<div class="balao ${m.papel}">
+    <div class="quem">${escapar(m.papel)} · ${quando(m.criadoEm)}${
+      m.tipoMidia !== "texto" ? " · " + escapar(m.tipoMidia) : ""
+    }</div>
+    ${m.conteudo ? `<div class="txt">${escapar(m.conteudo)}</div>` : ""}
+    ${corpo}
+  </div>`;
+}
+
+/**
+ * Busca os bytes de cada foto depois que a transcrição já está na tela.
+ *
+ * Uma requisição por foto, e não tudo dentro do JSON da conversa: assim a
+ * conversa abre na hora e as imagens vão aparecendo, em vez de a tela ficar
+ * parada esperando meio megabyte.
+ */
+async function carregarFotos(raiz) {
+  for (const img of $$("img[data-midia]", raiz)) {
+    try {
+      const m = await pegar("/api/midias/" + img.dataset.midia);
+      if (m.erro) throw new Error(m.erro);
+      img.src = `data:${m.mime};base64,${m.base64}`;
+      img.addEventListener("click", () =>
+        abrirGaveta("Foto do cliente", `<img class="fotoInteira" src="${img.src}" alt="">`));
+    } catch {
+      img.replaceWith(
+        Object.assign(document.createElement("span"), {
+          className: "vazio",
+          textContent: "não consegui carregar a foto",
+        }),
+      );
+    }
+  }
 }
 
 function pintarEstadoIa() {

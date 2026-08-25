@@ -27,6 +27,7 @@ import {
   acaoAlternarIa,
   acaoAlternarIaEmLote,
   acaoResponderManual,
+  acaoMidia,
   acaoMetricas,
   acaoDemandas,
   acaoSaidasPresas,
@@ -153,6 +154,10 @@ export async function criarPainel(pool: Pool, anthropic: Anthropic) {
       400,
     );
   });
+
+  app.get("/api/midias/:id", async (req, resp) =>
+    ou(resp, await acaoMidia(pool, (req.params as { id: string }).id), 404),
+  );
 
   // --------------------------------------------------------------- catálogo
 

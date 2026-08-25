@@ -190,9 +190,12 @@ export async function acaoLerConversa(pool: Pool, id: string) {
   if (!cab[0]) return { erro: "conversa não encontrada" };
 
   const { rows: msgs } = await pool.query(
-    `select papel, conteudo, tipo_midia, criado_em, modelo
-       from agente.mensagens where conversa_id = $1
-      order by criado_em asc, id asc`,
+    `select m.papel, m.conteudo, m.tipo_midia, m.criado_em, m.modelo,
+            md.id as midia_id
+       from agente.mensagens m
+       left join agente.midias md on md.mensagem_id = m.id
+      where m.conversa_id = $1
+      order by m.criado_em asc, m.id asc`,
     [id],
   );
 
@@ -216,6 +219,9 @@ export async function acaoLerConversa(pool: Pool, id: string) {
       tipoMidia: m.tipo_midia,
       criadoEm: m.criado_em,
       modelo: m.modelo,
+      // null quando a mensagem é anterior ao dia em que passamos a guardar
+      // as fotos; a tela mostra "foto não guardada" nesses casos.
+      midiaId: m.midia_id ?? null,
     })),
   };
 }
@@ -321,6 +327,29 @@ export async function acaoAlternarIaEmLote(
   );
   await registrar(pool, "assumir_conversa_lote", { quantas: r.rowCount ?? 0 });
   return { ok: true, alteradas: r.rowCount ?? 0 };
+}
+
+/**
+ * Entrega a foto de uma mensagem, em base64.
+ *
+ * Base64 dentro de JSON, e não binário puro, porque as duas hospedagens
+ * precisam servir isto: o Fastify e a função da Vercel. Um caminho binário
+ * exigiria plumbing diferente em cada uma para economizar um terço do
+ * tamanho numa imagem que o balcão abre uma vez.
+ */
+export async function acaoMidia(
+  pool: Pool,
+  id: string,
+): Promise<{ mime: string; base64: string; tamanho: number } | { erro: string }> {
+  if (!UUID.test(id)) return { erro: "id inválido" };
+
+  const { rows } = await pool.query(
+    "select mime, encode(bytes, 'base64') as base64, tamanho from agente.midias where id = $1",
+    [id],
+  );
+  const m = rows[0];
+  if (!m) return { erro: "foto não encontrada" };
+  return { mime: m.mime, base64: m.base64, tamanho: Number(m.tamanho) };
 }
 
 /**

@@ -42,23 +42,24 @@ descrever("historico", () => {
   });
 
   it("grava a mensagem do cliente", async () => {
-    const ok = await gravarMensagem(pool, {
+    const id = await gravarMensagem(pool, {
       conversaId,
       papel: "cliente",
       conteudo: "tem retentor?",
       msgExtId: "EXT-1",
     });
-    expect(ok).toBe(true);
+    // Devolve o id, e não um booleano: é por ele que a foto se pendura.
+    expect(id).not.toBeNull();
   });
 
   it("recusa o mesmo msg_ext_id — o evolution reenvia webhook", async () => {
-    const ok = await gravarMensagem(pool, {
+    const id = await gravarMensagem(pool, {
       conversaId,
       papel: "cliente",
       conteudo: "tem retentor?",
       msgExtId: "EXT-1",
     });
-    expect(ok).toBe(false);
+    expect(id).toBeNull();
   });
 
   it("devolve as últimas mensagens em ordem cronológica", async () => {
