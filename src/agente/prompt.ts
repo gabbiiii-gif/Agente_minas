@@ -171,11 +171,45 @@ Atenda normalmente e diga se tem a peça. Só não prometa separação nem entre
  * para dentro de `montarPrompt`, o relógio mudaria o prefixo a cada requisição
  * e o cache nunca acertaria — foi exatamente o que acontecia até aqui.
  */
+/**
+ * O primeiro nome pelo qual chamar o cliente, ou null quando não dá.
+ *
+ * O que vem do WhatsApp é o nome de perfil, que a pessoa escolhe — e às vezes
+ * escolhe ".", "😎" ou o nome da própria empresa. Chamar alguém de "." é pior
+ * do que não chamar de nada, então o que não parece nome vira null e o agente
+ * pergunta em vez de chutar.
+ */
+export function primeiroNome(nome: string | null): string | null {
+  const bruto = String(nome ?? "").trim();
+  if (bruto === "") return null;
+
+  // Só a primeira palavra: o cliente é "Gabriel", não "Gabriel Reis".
+  const primeiro = bruto.split(/\s+/)[0]!;
+
+  // Fora pontuação, emoji e dígito. Hífen fica: "Ana-Maria" é um nome.
+  const limpo = primeiro.replace(/[^\p{L}-]/gu, "");
+  if (limpo.length < 2) return null;
+
+  // "GABRIEL" e "gabriel" viram "Gabriel": o WhatsApp aceita os dois e o
+  // caixa alta no meio da frase parece grito.
+  return limpo[0]!.toUpperCase() + limpo.slice(1).toLowerCase();
+}
+
 export function montarContexto(ctx: ContextoTurno): string {
   const dataHora = ctx.agora.toLocaleString("pt-BR", { timeZone: "America/Belem" });
+  const chamar = primeiroNome(ctx.nome);
+
+  // A instrução vem colada no dado, e não só lá em cima entre outras vinte:
+  // regra distante do valor a que se aplica é a que o modelo mais deixa
+  // passar. O primeiro nome vem calculado para ele não ter que decidir qual
+  // pedaço de "Cleudemar Lima" usar.
+  const linhaCliente =
+    chamar === null
+      ? 'Cliente: não identificado — pergunte o nome antes de seguir ("Com quem eu falo?").'
+      : `Cliente: ${ctx.nome} — chame-o de "${chamar}". Use o nome na primeira mensagem e de novo a cada 2 ou 3 mensagens. Nunca use "cliente", "amigo" ou "senhor" no lugar dele.`;
 
   return `# ESTA CONVERSA
 Data/hora: ${dataHora}
-Cliente: ${ctx.nome ?? "não identificado"}
+${linhaCliente}
 Moto cadastrada: ${ctx.moto ?? "nenhuma"}`;
 }

@@ -166,7 +166,15 @@ export function criarAtendimento(deps: DepsAtendimento): Atendimento {
       return null;
     }
 
-    const contato = await resolverContato(deps.pool, evento.telefone, evento.nome);
+    // Numa mensagem que sai da loja, o `pushName` do evento é o perfil da
+    // LOJA, não o do cliente — gravá-lo renomeava o contato para "Minas Auto
+    // Peças" toda vez que o balcão respondia pelo celular, e o agente passava
+    // a chamar o cliente pelo nome da própria loja.
+    const contato = await resolverContato(
+      deps.pool,
+      evento.telefone,
+      evento.fromMe ? "" : evento.nome,
+    );
     const conversa = await conversaAtiva(deps.pool, contato.id);
 
     // A transcrição acontece antes de gravar para o histórico guardar o que

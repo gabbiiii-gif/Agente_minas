@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { montarPrompt, montarContexto } from "../../src/agente/prompt.js";
+import { montarPrompt, montarContexto, primeiroNome } from "../../src/agente/prompt.js";
 
 const LOJA = {
   horario: "Seg a Sex 8h-18h · Sáb 8h-12h",
@@ -109,6 +109,20 @@ describe("montarContexto — a parte que muda a cada mensagem", () => {
     expect(ctx).toContain("nenhuma");
   });
 
+  it("manda chamar o cliente pelo primeiro nome, junto do dado", () => {
+    // A regra existia lá em cima, entre outras vinte, e o agente ignorava.
+    // Colada no valor a que se aplica, e com o primeiro nome já calculado,
+    // ele não precisa decidir qual pedaço de "Cleudemar Lima" usar.
+    const ctx = montarContexto({ agora, nome: "Cleudemar Lima", moto: null });
+    expect(ctx).toContain('chame-o de "Cleudemar"');
+    expect(ctx).toMatch(/a cada 2 ou 3 mensagens/);
+  });
+
+  it("manda perguntar o nome quando não tem", () => {
+    const ctx = montarContexto({ agora, nome: null, moto: null });
+    expect(ctx).toContain("Com quem eu falo?");
+  });
+
   it("muda quando o relógio anda — por isso fica fora do bloco cacheado", () => {
     const antes = montarContexto({ agora, nome: null, moto: null });
     const depois = montarContexto({
@@ -117,5 +131,34 @@ describe("montarContexto — a parte que muda a cada mensagem", () => {
       moto: null,
     });
     expect(antes).not.toBe(depois);
+  });
+});
+
+/**
+ * O nome vem do perfil do WhatsApp, que a pessoa escolhe — e escolhe coisas
+ * que não são nome. Chamar alguém de "." é pior do que não chamar de nada.
+ */
+describe("primeiroNome", () => {
+  it("usa só a primeira palavra", () => {
+    expect(primeiroNome("Cleudemar Lima")).toBe("Cleudemar");
+  });
+
+  it("normaliza o caixa alta do perfil", () => {
+    expect(primeiroNome("GABRIEL REIS")).toBe("Gabriel");
+    expect(primeiroNome("gabriel")).toBe("Gabriel");
+  });
+
+  it("recusa o que não é nome, para o agente perguntar em vez de chutar", () => {
+    for (const lixo of [null, "", "   ", ".", "😎", "123", "A", "!!!"]) {
+      expect(primeiroNome(lixo), JSON.stringify(lixo)).toBeNull();
+    }
+  });
+
+  it("guarda o hífen, que é nome de gente", () => {
+    expect(primeiroNome("Ana-Maria Souza")).toBe("Ana-maria");
+  });
+
+  it("tira emoji grudado sem perder o nome", () => {
+    expect(primeiroNome("Isa ☀️")).toBe("Isa");
   });
 });
