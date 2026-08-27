@@ -142,9 +142,15 @@ describe("montarContexto — a parte que muda a cada mensagem", () => {
     expect(ctx).toMatch(/a cada 2 ou 3 mensagens/);
   });
 
-  it("manda perguntar o nome quando não tem", () => {
+  it("manda perguntar o nome junto com o atendimento, nunca antes", () => {
+    // Pedir o nome primeiro custa um turno: o aceite pegou o agente
+    // respondendo "Boa tarde! Com quem eu falo?" a quem só queria saber se
+    // tinha retentor — sem buscar nada. A regra do nome continua, o custo não.
     const ctx = montarContexto({ agora, nome: null, moto: null });
-    expect(ctx).toContain("Com quem eu falo?");
+    expect(ctx).toContain("não identificado");
+    expect(ctx).toMatch(/com quem eu falo\?/i);
+    expect(ctx).toMatch(/JUNTO com o atendimento/);
+    expect(ctx).toMatch(/NUNCA antes de buscar/);
   });
 
   it("muda quando o relógio anda — por isso fica fora do bloco cacheado", () => {

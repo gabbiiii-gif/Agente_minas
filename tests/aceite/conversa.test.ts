@@ -277,6 +277,25 @@ descrever("aceite — conversa com o modelo real", () => {
     expect(r.texto).not.toMatch(/tenho \d+|resta[m]? \d+|só tem \d+/i);
   });
 
+  it("14) preço de peça que não fechou vira handoff, sem pedir foto nem código", async () => {
+    // A conversa do Pedro, como aconteceu: tres pecas e o valor do bloco. O
+    // agente gastou 1012 tokens para pedir foto e codigo, nao chamou o balcao
+    // e nao registrou demanda. O balcao teve que entrar e dar o preco na mao.
+    const r = await conversar(
+      [
+        cliente(["Rabeta /suporte de placa", "Mesa superior", "Bros 150 2013"].join("\n")),
+        cliente("Valor do bloco ."),
+      ],
+      { nome: "Pedro" },
+    );
+
+    expect(r.usou).toContain("transferir_humano");
+    expect(r.usou).toContain("registrar_demanda");
+    // Quem ja perguntou preco decidiu comprar; mandar essa pessoa atras do
+    // codigo da peca velha e onde a venda morre.
+    expect(r.texto).not.toMatch(/manda(r)? (uma )?foto|c[óo]digo da pe[çc]a/i);
+  });
+
   /**
    * Guarda de regressão sobre TODAS as respostas coletadas acima.
    *
