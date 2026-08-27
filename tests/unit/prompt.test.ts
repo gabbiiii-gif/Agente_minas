@@ -63,6 +63,30 @@ describe("montarPrompt — regras que o negócio não pode perder", () => {
     expect(sobraram, `pedido de licença fora da proibição: ${sobraram.join(" / ")}`).toHaveLength(0);
   });
 
+  it("diz que o objetivo é entregar ao balcão, não conversar", () => {
+    // O cliente reclamou que a IA conversa demais. A conversa real: o cliente
+    // pediu tres pecas e o valor, e o agente gastou 1012 tokens de saida —
+    // quatro vezes a media — para pedir foto e codigo, sem chamar o balcao.
+    expect(prompt).toContain("# O QUE É SUCESSO AQUI");
+    expect(prompt).toMatch(/chame o balcão/i);
+  });
+
+  it("transfere quando perguntam preço de peça que não achou", () => {
+    // Foi aqui que a venda morreu: pedir código a quem já quer comprar.
+    expect(prompt).toMatch(/Não peça foto, não peça código/);
+    expect(prompt).toMatch(/quem pergunta preço já decidiu comprar/i);
+  });
+
+  it("responde lista de peças de uma vez, não item por item", () => {
+    expect(prompt).toContain("# VÁRIAS PEÇAS DE UMA VEZ");
+    expect(prompt).toMatch(/Nunca trate item por item/i);
+  });
+
+  it("limita a mensagem a duas linhas e uma ideia", () => {
+    expect(prompt).toMatch(/NO MÁXIMO 2 linhas/);
+    expect(prompt).toMatch(/Uma ideia por mensagem/);
+  });
+
   it("repete preço e quantidade na lista final de proibições", () => {
     const proibicoes = prompt.slice(prompt.indexOf("# PROIBIÇÕES"));
     expect(proibicoes).toMatch(/Nunca fale preço/);
