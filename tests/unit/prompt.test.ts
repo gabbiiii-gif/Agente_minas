@@ -71,10 +71,15 @@ describe("montarPrompt — regras que o negócio não pode perder", () => {
     expect(prompt).toMatch(/chame o balcão/i);
   });
 
-  it("transfere quando perguntam preço de peça que não achou", () => {
-    // Foi aqui que a venda morreu: pedir código a quem já quer comprar.
+  it("transfere quando perguntam preço e não há peça fechada", () => {
+    // Foi aqui que a venda morreu: pedir código a quem já quer comprar. Vale
+    // tanto para busca vazia quanto para busca que achou coisa que não bate —
+    // foi o segundo caso que escapou da primeira versão da regra.
+    expect(prompt).toMatch(/NÃO tem uma peça fechada para oferecer/);
+    expect(prompt).toMatch(/achou coisas que não batem com a moto/);
     expect(prompt).toMatch(/Não peça foto, não peça código/);
-    expect(prompt).toMatch(/quem pergunta preço já decidiu comprar/i);
+    // Sem esta linha a REGRA 3 vence e o agente volta a pedir a peça velha.
+    expect(prompt).toMatch(/GANHA da REGRA 3/);
   });
 
   it("responde lista de peças de uma vez, não item por item", () => {
