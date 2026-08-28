@@ -2,10 +2,17 @@ import { describe, expect, it } from "vitest";
 import { casarComFrota, type LinhaMoto } from "../../src/catalogo/fitment.js";
 
 const FROTA: LinhaMoto[] = [
-  { id: "m1", marca: "honda", modelo: "titan", cilindrada: 150 },
-  { id: "m2", marca: "honda", modelo: "titan", cilindrada: 160 },
-  { id: "m3", marca: "honda", modelo: "biz",   cilindrada: 125 },
-  { id: "m4", marca: "honda", modelo: "bros",  cilindrada: 150 },
+  { id: "m1", marca: "honda", modelo: "titan", cilindrada: 150,
+    apelidos: ["titan 150", "titam 150", "cg150"] },
+  { id: "m2", marca: "honda", modelo: "titan", cilindrada: 160,
+    apelidos: ["titan 160", "cg160"] },
+  { id: "m3", marca: "honda", modelo: "biz",   cilindrada: 125, apelidos: ["biz 125"] },
+  { id: "m4", marca: "honda", modelo: "bros",  cilindrada: 150,
+    apelidos: ["nxr150", "nxr 150", "bros 150"] },
+  { id: "m5", marca: "honda", modelo: "bros",  cilindrada: 125,
+    apelidos: ["nxr125", "nxr 125", "bros 125"] },
+  { id: "m6", marca: "suzuki", modelo: "intruder", cilindrada: 125,
+    apelidos: ["intrunder 125", "intruder"] },
 ];
 
 describe("casarComFrota", () => {
@@ -24,6 +31,27 @@ describe("casarComFrota", () => {
       FROTA,
     );
     expect(r.sort()).toEqual(["m3", "m4"]);
+  });
+
+  it("casa o apelido do estoque, não só o nome oficial do modelo", () => {
+    // A loja escreve NXR e nunca Bros: sem isto, 976 peças ficavam sem moto.
+    expect(casarComFrota([{ modelo: "nxr", cilindrada: 150 }], FROTA)).toEqual(["m4"]);
+  });
+
+  it("apelido sem cilindrada vale para todas as cilindradas do modelo", () => {
+    // "CARENAGEM NXR" sem número serve tanto na 125 quanto na 150.
+    expect(casarComFrota([{ modelo: "nxr", cilindrada: null }], FROTA).sort())
+      .toEqual(["m4", "m5"]);
+  });
+
+  it("casa a grafia errada que o ERP usa", () => {
+    expect(casarComFrota([{ modelo: "titam", cilindrada: 150 }], FROTA)).toEqual(["m1"]);
+    expect(casarComFrota([{ modelo: "intrunder", cilindrada: 125 }], FROTA)).toEqual(["m6"]);
+  });
+
+  it("apelido não confunde cilindradas diferentes do mesmo apelido", () => {
+    // "cg150" e "cg160" viram os dois o nome "cg"; a cilindrada desempata.
+    expect(casarComFrota([{ modelo: "cg", cilindrada: 160 }], FROTA)).toEqual(["m2"]);
   });
 
   it("descarta modelo que não está na frota cadastrada", () => {

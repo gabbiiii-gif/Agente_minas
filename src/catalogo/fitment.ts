@@ -16,6 +16,11 @@ export interface LinhaMoto {
   marca: string;
   modelo: string;
   cilindrada: number | null;
+  /**
+   * Como a loja e o cliente também escrevem esta moto: "nxr 150" para a Bros,
+   * "titam 150" e "cg150" para a Titan. Vem do seed `motos.sql`.
+   */
+  apelidos?: string[];
 }
 
 // Haiku dá conta desta tarefa e custa uma fração do Sonnet: é extração
@@ -138,10 +143,10 @@ export function casarComFrota(
   extraidos: ModeloExtraido[],
   frota: LinhaMoto[],
 ): string[] {
+  const porNome = indexarPorNome(frota);
   const ids = new Set<string>();
   for (const e of extraidos) {
-    for (const moto of frota) {
-      if (moto.modelo !== e.modelo) continue;
+    for (const moto of porNome.get(e.modelo) ?? []) {
       // Sem cilindrada na descrição, a peça vale para todas as cilindradas
       // daquele modelo — é o que "PISTAO TITAN" significa no catálogo.
       if (e.cilindrada !== null && moto.cilindrada !== e.cilindrada) continue;
@@ -149,6 +154,58 @@ export function casarComFrota(
     }
   }
   return [...ids];
+}
+
+/**
+ * Todos os nomes pelos quais uma moto pode ser citada numa descrição de peça.
+ *
+ * Casar só por `modelo` deixava 976 peças de fora: a loja escreve "NXR 150" no
+ * estoque e nunca "Bros", então a extração devolvia {modelo:"nxr"} e não achava
+ * moto nenhuma — as três Bros ficavam com zero peças.
+ *
+ * Os apelidos vêm com a cilindrada grudada ("nxr 150", "cg150") e a extração
+ * separa modelo de cilindrada. Tirando a cilindrada do apelido sobra o nome
+ * puro ("nxr", "cg"), e a regra de cilindrada que já existia continua valendo.
+ */
+function nomesDaMoto(moto: LinhaMoto): string[] {
+  const nomes = new Set<string>([moto.modelo]);
+  const cc = moto.cilindrada;
+  const sufixo = cc === null ? null : new RegExp(`\s*${cc}$`);
+  for (const apelido of moto.apelidos ?? []) {
+    const limpo = apelido.trim().toLowerCase();
+    if (limpo === "") continue;
+    // "nxr 150" e "nxr150" viram "nxr". Apelido sem cilindrada ("intruder",
+    // "quadriciclo honda") entra inteiro.
+    const semCc = sufixo ? limpo.replace(sufixo, "").trim() : limpo;
+    nomes.add(semCc === "" ? limpo : semCc);
+  }
+  return [...nomes];
+}
+
+/**
+ * Índice nome → motos, montado uma vez por frota.
+ *
+ * `casarComFrota` roda uma vez por peça (~9.000) e a frota tem 142 linhas:
+ * derivar os nomes a cada chamada seria o gargalo da rodada. O WeakMap prende
+ * o índice ao próprio array da frota, então frota nova (outro teste, outra
+ * execução) nunca reaproveita índice velho.
+ */
+const INDICES = new WeakMap<LinhaMoto[], Map<string, LinhaMoto[]>>();
+
+function indexarPorNome(frota: LinhaMoto[]): Map<string, LinhaMoto[]> {
+  const pronto = INDICES.get(frota);
+  if (pronto) return pronto;
+
+  const indice = new Map<string, LinhaMoto[]>();
+  for (const moto of frota) {
+    for (const nome of nomesDaMoto(moto)) {
+      const lista = indice.get(nome);
+      if (lista) lista.push(moto);
+      else indice.set(nome, [moto]);
+    }
+  }
+  INDICES.set(frota, indice);
+  return indice;
 }
 
 /**
@@ -169,7 +226,7 @@ export async function popularFitment(
   apenasPendentes = true,
 ): Promise<{ produtos: number; vinculos: number; semCasar: number }> {
   const { rows: frota } = await pool.query<LinhaMoto>(
-    "select id, marca, modelo, cilindrada from agente.motos",
+    "select id, marca, modelo, cilindrada, apelidos from agente.motos",
   );
   const { rows: produtos } = await pool.query<{ id: string; descricao: string }>(
     `select id, descricao from agente.produtos
@@ -192,12 +249,14 @@ export async function popularFitment(
   // Só marca como processado quem o modelo realmente respondeu. Produto de
   // lote que falhou fica sem marca e entra na próxima execução.
   const processados: string[] = [];
+  const extracoes: string[] = [];
   let semCasar = 0;
 
   for (const produto of produtos) {
     const modelos = extraidos.get(produto.descricao);
     if (modelos === undefined) continue;
     processados.push(produto.id);
+    extracoes.push(JSON.stringify(modelos));
 
     const motoIds = casarComFrota(modelos, frota);
     if (motoIds.length === 0) {
@@ -210,26 +269,118 @@ export async function popularFitment(
     }
   }
 
-  const LOTE_INSERT = 1000;
-  for (let i = 0; i < paresProduto.length; i += LOTE_INSERT) {
-    await pool.query(
-      `insert into agente.produto_moto (produto_id, moto_id, origem, confianca)
-       select unnest($1::uuid[]), unnest($2::uuid[]), 'auto', 0.7
-       on conflict (produto_id, moto_id) do nothing`,
-      [
-        paresProduto.slice(i, i + LOTE_INSERT),
-        paresMoto.slice(i, i + LOTE_INSERT),
-      ],
-    );
-  }
-
-  for (let i = 0; i < processados.length; i += LOTE_INSERT) {
-    await pool.query(
-      `update agente.produtos set fitment_em = now()
-        where id = any($1::uuid[])`,
-      [processados.slice(i, i + LOTE_INSERT)],
-    );
-  }
-
+  await gravarFitment(pool, processados, extracoes, paresProduto, paresMoto);
   return { produtos: processados.length, vinculos: paresProduto.length, semCasar };
+}
+
+/**
+ * Refaz o casamento a partir da extração já guardada, sem chamar a API.
+ *
+ * É o que rodar depois de mexer no seed de motos: o texto da peça não mudou,
+ * só a frota contra a qual ele é casado. Peça sem extração guardada é ignorada
+ * — ela precisa de `popularFitment` primeiro.
+ */
+export async function recasarFitment(
+  pool: Pool,
+): Promise<{ produtos: number; vinculos: number; semCasar: number }> {
+  const { rows: frota } = await pool.query<LinhaMoto>(
+    "select id, marca, modelo, cilindrada, apelidos from agente.motos",
+  );
+  const { rows: produtos } = await pool.query<{
+    id: string;
+    modelos_extraidos: ModeloExtraido[];
+  }>(
+    `select id, modelos_extraidos from agente.produtos
+      where ativo and modelos_extraidos is not null`,
+  );
+
+  const paresProduto: string[] = [];
+  const paresMoto: string[] = [];
+  const ids: string[] = [];
+  let semCasar = 0;
+
+  for (const produto of produtos) {
+    ids.push(produto.id);
+    const motoIds = casarComFrota(produto.modelos_extraidos, frota);
+    if (motoIds.length === 0) {
+      semCasar += 1;
+      continue;
+    }
+    for (const motoId of motoIds) {
+      paresProduto.push(produto.id);
+      paresMoto.push(motoId);
+    }
+  }
+
+  await gravarFitment(pool, ids, null, paresProduto, paresMoto);
+  return { produtos: ids.length, vinculos: paresProduto.length, semCasar };
+}
+
+// 1.000 ids por query: acima disso o array de parâmetros começa a pesar mais
+// do que a ida a mais ao banco.
+const LOTE_INSERT = 1000;
+
+/**
+ * Grava vínculos e marcas de processamento, numa transação só.
+ *
+ * Substitui os vínculos 'auto' dos produtos processados em vez de só somar:
+ * senão um vínculo tirado da frota (modelo removido, apelido corrigido)
+ * sobreviveria para sempre. Vínculo 'humano' — o balcão confirmando que a peça
+ * serve — nunca é tocado; ele vale mais do que qualquer extração.
+ */
+async function gravarFitment(
+  pool: Pool,
+  processados: string[],
+  /** JSON da extração por produto, na mesma ordem; null quando só recasando. */
+  extracoes: string[] | null,
+  paresProduto: string[],
+  paresMoto: string[],
+): Promise<void> {
+  if (processados.length === 0) return;
+  const cliente = await pool.connect();
+
+  try {
+    await cliente.query("begin");
+
+    for (let i = 0; i < processados.length; i += LOTE_INSERT) {
+      const fatia = processados.slice(i, i + LOTE_INSERT);
+      await cliente.query(
+        `delete from agente.produto_moto
+          where produto_id = any($1::uuid[]) and origem = 'auto'`,
+        [fatia],
+      );
+    }
+
+    for (let i = 0; i < paresProduto.length; i += LOTE_INSERT) {
+      await cliente.query(
+        `insert into agente.produto_moto (produto_id, moto_id, origem, confianca)
+         select unnest($1::uuid[]), unnest($2::uuid[]), 'auto', 0.7
+         on conflict (produto_id, moto_id) do nothing`,
+        [
+          paresProduto.slice(i, i + LOTE_INSERT),
+          paresMoto.slice(i, i + LOTE_INSERT),
+        ],
+      );
+    }
+
+    // Recasamento não mexe em `fitment_em` nem reescreve a extração: o texto
+    // da peça não mudou, só a frota.
+    for (let i = 0; extracoes !== null && i < processados.length; i += LOTE_INSERT) {
+      const fatia = processados.slice(i, i + LOTE_INSERT);
+      await cliente.query(
+        `update agente.produtos p
+            set fitment_em = now(), modelos_extraidos = e.json::jsonb
+           from unnest($1::uuid[], $2::text[]) as e(id, json)
+          where p.id = e.id`,
+        [fatia, extracoes.slice(i, i + LOTE_INSERT)],
+      );
+    }
+
+    await cliente.query("commit");
+  } catch (erro) {
+    await cliente.query("rollback");
+    throw erro;
+  } finally {
+    cliente.release();
+  }
 }
