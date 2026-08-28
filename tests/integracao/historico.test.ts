@@ -41,6 +41,30 @@ descrever("historico", () => {
     expect(outra.id).toBe(conversaId);
   });
 
+  it("duas invocações simultâneas abrem UMA conversa, não duas", async () => {
+    // Em serverless duas mensagens do mesmo cliente chegam em invocacoes
+    // paralelas: as duas veem "nenhuma conversa aberta" e as duas inserem. O
+    // indice parcial conversas_uma_aberta_por_contato barra a segunda, e sem
+    // `on conflict` isso virava erro na cara de quem estava atendendo.
+    const contato = await resolverContato(pool, "5593900000077", "Corrida");
+    await pool.query("delete from agente.conversas where contato_id = $1", [contato.id]);
+
+    const [a, b] = await Promise.all([
+      conversaAtiva(pool, contato.id),
+      conversaAtiva(pool, contato.id),
+    ]);
+
+    expect(a.id).toBe(b.id);
+
+    const { rows } = await pool.query(
+      "select count(*)::int as n from agente.conversas where contato_id = $1 and status <> 'encerrada'",
+      [contato.id],
+    );
+    expect(rows[0].n).toBe(1);
+
+    await pool.query("delete from agente.contatos where telefone = '5593900000077'");
+  });
+
   it("grava a mensagem do cliente", async () => {
     const id = await gravarMensagem(pool, {
       conversaId,

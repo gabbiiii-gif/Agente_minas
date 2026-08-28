@@ -46,12 +46,32 @@ export async function conversaAtiva(pool: Pool, contatoId: string): Promise<Conv
     return { id: rows[0].id, status: rows[0].status, iniciadaEm: rows[0].iniciada_em };
   }
 
+  // `on conflict` porque o SELECT acima nao segura nada: em serverless duas
+  // mensagens do mesmo cliente chegam em invocacoes paralelas, as duas veem
+  // "nenhuma conversa aberta" e as duas tentam inserir. O indice parcial
+  // `conversas_uma_aberta_por_contato` barra a segunda — sem esta clausula,
+  // com um erro na cara de quem esta atendendo.
   const nova = await pool.query(
     `insert into agente.conversas (contato_id) values ($1)
+     on conflict (contato_id) where status <> 'encerrada' do nothing
      returning id, status, iniciada_em`,
     [contatoId],
   );
-  const r = nova.rows[0]!;
+
+  if (nova.rows[0]) {
+    const r = nova.rows[0];
+    return { id: r.id, status: r.status, iniciadaEm: r.iniciada_em };
+  }
+
+  // Zero linhas significa que a outra invocacao ganhou a corrida. A conversa
+  // existe, so nao e nossa: le de novo em vez de falhar.
+  const { rows: dela } = await pool.query(
+    `select id, status, iniciada_em from agente.conversas
+      where contato_id = $1 and status <> 'encerrada'
+      order by iniciada_em desc limit 1`,
+    [contatoId],
+  );
+  const r = dela[0]!;
   return { id: r.id, status: r.status, iniciadaEm: r.iniciada_em };
 }
 
