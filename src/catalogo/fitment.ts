@@ -10,6 +10,21 @@ export interface ModeloExtraido {
   cilindrada: number | null;
 }
 
+/**
+ * Uma peça casada com uma moto, e o quanto disso a descrição realmente afirma.
+ *
+ * `exato` = a descrição trouxe a cilindrada em número e ela bate ("PISTAO
+ * SPEED150" -> speed 150). O agente pode afirmar compatibilidade nesses.
+ *
+ * `exato: false` = a descrição citou só o modelo e a regra espalhou a peça para
+ * todas as cilindradas dele. É onde nascem os erros que geram devolução
+ * ("DESCANSO LATERAL XT/TDM225" caindo na Ténéré 600), então o agente hedgeia.
+ */
+export interface Casamento {
+  motoId: string;
+  exato: boolean;
+}
+
 /** Linha de `agente.motos` — a frota que a loja atende. */
 export interface LinhaMoto {
   id: string;
@@ -142,18 +157,21 @@ export async function extrairModelos(
 export function casarComFrota(
   extraidos: ModeloExtraido[],
   frota: LinhaMoto[],
-): string[] {
+): Casamento[] {
   const porNome = indexarPorNome(frota);
-  const ids = new Set<string>();
+  const achados = new Map<string, boolean>();
   for (const e of extraidos) {
     for (const moto of porNome.get(e.modelo) ?? []) {
       // Sem cilindrada na descrição, a peça vale para todas as cilindradas
       // daquele modelo — é o que "PISTAO TITAN" significa no catálogo.
       if (e.cilindrada !== null && moto.cilindrada !== e.cilindrada) continue;
-      ids.add(moto.id);
+      const exato = e.cilindrada !== null;
+      // A mesma moto pode ser alcançada pelas duas vias ("TITAN/TITAN150").
+      // A evidência mais forte manda: uma vez exato, sempre exato.
+      achados.set(moto.id, (achados.get(moto.id) ?? false) || exato);
     }
   }
-  return [...ids];
+  return [...achados].map(([motoId, exato]) => ({ motoId, exato }));
 }
 
 /**
@@ -249,6 +267,7 @@ export async function popularFitment(
   // seriam ~9.000 idas ao banco.
   const paresProduto: string[] = [];
   const paresMoto: string[] = [];
+  const paresOrigem: string[] = [];
   // Só marca como processado quem o modelo realmente respondeu. Produto de
   // lote que falhou fica sem marca e entra na próxima execução.
   const processados: string[] = [];
@@ -261,18 +280,19 @@ export async function popularFitment(
     processados.push(produto.id);
     extracoes.push(JSON.stringify(modelos));
 
-    const motoIds = casarComFrota(modelos, frota);
-    if (motoIds.length === 0) {
+    const casamentos = casarComFrota(modelos, frota);
+    if (casamentos.length === 0) {
       semCasar += 1;
       continue;
     }
-    for (const motoId of motoIds) {
+    for (const c of casamentos) {
       paresProduto.push(produto.id);
-      paresMoto.push(motoId);
+      paresMoto.push(c.motoId);
+      paresOrigem.push(c.exato ? "auto_exato" : "auto");
     }
   }
 
-  await gravarFitment(pool, processados, extracoes, paresProduto, paresMoto);
+  await gravarFitment(pool, processados, extracoes, paresProduto, paresMoto, paresOrigem);
   return { produtos: processados.length, vinculos: paresProduto.length, semCasar };
 }
 
@@ -299,23 +319,25 @@ export async function recasarFitment(
 
   const paresProduto: string[] = [];
   const paresMoto: string[] = [];
+  const paresOrigem: string[] = [];
   const ids: string[] = [];
   let semCasar = 0;
 
   for (const produto of produtos) {
     ids.push(produto.id);
-    const motoIds = casarComFrota(produto.modelos_extraidos, frota);
-    if (motoIds.length === 0) {
+    const casamentos = casarComFrota(produto.modelos_extraidos, frota);
+    if (casamentos.length === 0) {
       semCasar += 1;
       continue;
     }
-    for (const motoId of motoIds) {
+    for (const c of casamentos) {
       paresProduto.push(produto.id);
-      paresMoto.push(motoId);
+      paresMoto.push(c.motoId);
+      paresOrigem.push(c.exato ? "auto_exato" : "auto");
     }
   }
 
-  await gravarFitment(pool, ids, null, paresProduto, paresMoto);
+  await gravarFitment(pool, ids, null, paresProduto, paresMoto, paresOrigem);
   return { produtos: ids.length, vinculos: paresProduto.length, semCasar };
 }
 
@@ -338,6 +360,8 @@ async function gravarFitment(
   extracoes: string[] | null,
   paresProduto: string[],
   paresMoto: string[],
+  /** 'auto' ou 'auto_exato' por par, na mesma ordem. */
+  paresOrigem: string[],
 ): Promise<void> {
   if (processados.length === 0) return;
   const cliente = await pool.connect();
@@ -348,8 +372,11 @@ async function gravarFitment(
     for (let i = 0; i < processados.length; i += LOTE_INSERT) {
       const fatia = processados.slice(i, i + LOTE_INSERT);
       await cliente.query(
+        // Apaga só o que a máquina criou. Vínculo 'humano' — o balcão dizendo
+        // que a peça serve — sobrevive a todo recasamento; vale mais do que
+        // qualquer extração.
         `delete from agente.produto_moto
-          where produto_id = any($1::uuid[]) and origem = 'auto'`,
+          where produto_id = any($1::uuid[]) and origem in ('auto','auto_exato')`,
         [fatia],
       );
     }
@@ -357,11 +384,13 @@ async function gravarFitment(
     for (let i = 0; i < paresProduto.length; i += LOTE_INSERT) {
       await cliente.query(
         `insert into agente.produto_moto (produto_id, moto_id, origem, confianca)
-         select unnest($1::uuid[]), unnest($2::uuid[]), 'auto', 0.7
+         select p, m, o, case when o = 'auto_exato' then 0.95 else 0.7 end
+           from unnest($1::uuid[], $2::uuid[], $3::text[]) as t(p, m, o)
          on conflict (produto_id, moto_id) do nothing`,
         [
           paresProduto.slice(i, i + LOTE_INSERT),
           paresMoto.slice(i, i + LOTE_INSERT),
+          paresOrigem.slice(i, i + LOTE_INSERT),
         ],
       );
     }

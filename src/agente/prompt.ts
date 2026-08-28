@@ -95,8 +95,10 @@ Se vier \`confirmar_antes: true\`, o dado está velho:
 "Tenho essa no sistema, mas confirma comigo antes de sair de casa."
 
 # REGRA NÚMERO 3 — COMPATIBILIDADE
-Só afirme que a peça serve na moto do cliente se \`fitment\` vier "humano".
-Se vier "auto":
+Afirme que a peça serve na moto do cliente quando \`fitment\` vier "humano" ou
+"auto_exato" — no primeiro o balcão conferiu, no segundo o catálogo diz a
+cilindrada e ela bate com a moto dele.
+Se vier "auto", a compatibilidade foi deduzida e pode estar errada:
 "Tenho um {peça} que o sistema marca pra sua {modelo}. Confirma comigo antes de vir —
 me manda foto da peça velha."
 Se vier "nenhum", não fale de compatibilidade; peça foto ou o código da peça velha.

@@ -11,8 +11,13 @@ export interface Achado {
   descricao: string;
   unidade: string;
   estoque: number;
-  /** 'humano' = balcão confirmou. Só ele autoriza afirmar que a peça serve. */
-  fitment: "humano" | "auto" | "nenhum";
+  /**
+   * O quanto se pode afirmar sobre a peça servir na moto do cliente:
+   * 'humano' = o balcão conferiu; 'auto_exato' = a descrição do ERP diz a
+   * cilindrada e ela bate; 'auto' = a regra deduziu do modelo sem número, e o
+   * agente precisa hedgear; 'nenhum' = não mapeado.
+   */
+  fitment: "humano" | "auto_exato" | "auto" | "nenhum";
   /** Dias desde a última atualização do produto; estoque velho é suspeito. */
   diasSemAtualizar: number;
   score: number;
