@@ -219,9 +219,9 @@ export async function popularFitment(
   pool: Pool,
   apiKey: string,
   /**
-   * Por padrão processa só quem ainda não passou pela extração. Passe `false`
-   * para reprocessar o catálogo inteiro — necessário depois de mexer no seed
-   * de motos, que muda o resultado do casamento.
+   * Por padrão processa só quem ainda não tem extração guardada. Passe `false`
+   * para reextrair o catálogo inteiro — só vale a pena quando a instrução de
+   * extração mudou; para mudança no seed de motos, use `recasarFitment`.
    */
   apenasPendentes = true,
 ): Promise<{ produtos: number; vinculos: number; semCasar: number }> {
@@ -229,8 +229,11 @@ export async function popularFitment(
     "select id, marca, modelo, cilindrada, apelidos from agente.motos",
   );
   const { rows: produtos } = await pool.query<{ id: string; descricao: string }>(
+    // "Pendente" é quem não tem extração guardada, e não só quem nunca foi
+    // processado: peça marcada antes desta coluna existir precisa passar de
+    // novo. É o que torna a rodada retomável se ela cair no meio.
     `select id, descricao from agente.produtos
-      where ativo ${apenasPendentes ? "and fitment_em is null" : ""}`,
+      where ativo ${apenasPendentes ? "and modelos_extraidos is null" : ""}`,
   );
 
   if (produtos.length === 0) {
